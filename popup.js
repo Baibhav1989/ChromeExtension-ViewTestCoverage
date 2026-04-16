@@ -103,6 +103,9 @@ function initialize() {
       closeTestModal();
     }
   });
+
+  // Ensure method details section is hidden on initialization
+  methodDetailsSectionEl.classList.add("hidden");
 }
 
 function toggleMethodDetailsView() {
@@ -441,13 +444,21 @@ async function fillSessionFromActiveTab() {
       throw new Error("Active tab is not a Salesforce domain.");
     }
 
-    const sidCookie = await chrome.cookies.get({
+    let sidCookie = await chrome.cookies.get({
       url: tabUrl.origin,
       name: "sid"
     });
 
+    // If sid not found directly, search for it in all cookies for the domain
     if (!sidCookie || !sidCookie.value) {
-      throw new Error("No Salesforce sid cookie found in the active tab.");
+      const allCookies = await chrome.cookies.getAll({
+        domain: tabUrl.hostname
+      });
+      sidCookie = allCookies.find(cookie => cookie.name === "sid");
+    }
+
+    if (!sidCookie || !sidCookie.value) {
+      throw new Error("No Salesforce session found. Please ensure you are logged into Salesforce and try again.");
     }
 
     form.instanceUrl.value = tabUrl.origin;
