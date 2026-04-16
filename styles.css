@@ -182,6 +182,53 @@ tbody tr:hover {
   background: #e8f1ff;
 }
 
+.toggle-view {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 0;
+}
+
+.toggle-view label {
+  margin: 0;
+}
+
+.toggle-btn {
+  width: 50px;
+  padding: 4px 2px;
+  background: #d1d5db;
+  position: relative;
+  display: flex;
+  align-items: center;
+  border-radius: 20px;
+  transition: background-color 0.3s ease;
+}
+
+.toggle-btn:hover {
+  background: #bfbfbf;
+}
+
+.toggle-btn[aria-pressed="true"] {
+  background: #10b981;
+}
+
+.toggle-btn[aria-pressed="true"]:hover {
+  background: #059669;
+}
+
+.toggle-slider {
+  display: block;
+  width: 20px;
+  height: 20px;
+  background: white;
+  border-radius: 50%;
+  transition: transform 0.3s ease;
+}
+
+.toggle-btn[aria-pressed="true"] .toggle-slider {
+  transform: translateX(28px);
+}
+
 .hidden {
   display: none;
 }

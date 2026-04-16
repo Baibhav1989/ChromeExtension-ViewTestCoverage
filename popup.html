@@ -11,38 +11,40 @@
       <h1>Apex Coverage</h1>
 
       <form id="config-form" class="config-form">
-        <label for="instance-url">Salesforce Instance URL</label>
         <input
           id="instance-url"
           name="instanceUrl"
           type="url"
           placeholder="https://your-domain.my.salesforce.com"
-          required
+          readonly
+          style="display: none;"
         />
 
-        <label for="access-token">Access Token</label>
         <input
           id="access-token"
           name="accessToken"
           type="password"
           placeholder="00D..."
-          required
+          readonly
+          style="display: none;"
         />
 
-        <label for="api-version">API Version</label>
         <input
           id="api-version"
           name="apiVersion"
           type="text"
           value="60.0"
           pattern="^[0-9]+\\.[0-9]+$"
-          required
+          readonly
+          style="display: none;"
         />
 
-        <label class="checkbox-label" for="include-method-details">
-          <input id="include-method-details" name="includeMethodDetails" type="checkbox" />
-          Method-wise view (off = previous class-wise view)
-        </label>
+        <div class="toggle-view">
+          <label for="include-method-details">Method-wise view</label>
+          <button id="include-method-details" name="includeMethodDetails" type="button" class="toggle-btn" aria-pressed="false">
+            <span class="toggle-slider"></span>
+          </button>
+        </div>
 
         <div class="actions">
           <button id="session-button" type="button" class="secondary">

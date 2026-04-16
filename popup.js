@@ -26,6 +26,7 @@ initialize();
 
 function initialize() {
   restoreConfig();
+  fillSessionFromActiveTab(); // Auto-load session on startup
 
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -40,7 +41,9 @@ function initialize() {
     exportVisibleRowsToCsv();
   });
 
-  includeMethodDetailsEl.addEventListener("change", async () => {
+  includeMethodDetailsEl.addEventListener("click", async (event) => {
+    event.preventDefault();
+    toggleMethodDetailsView();
     await handleMethodViewToggle();
   });
 
@@ -48,6 +51,11 @@ function initialize() {
     visibleRows = filterRows(allRows, searchEl.value);
     renderRows(visibleRows);
   });
+}
+
+function toggleMethodDetailsView() {
+  const isPressed = includeMethodDetailsEl.getAttribute("aria-pressed") === "true";
+  includeMethodDetailsEl.setAttribute("aria-pressed", !isPressed);
 }
 
 async function restoreConfig() {
@@ -61,7 +69,7 @@ async function restoreConfig() {
   form.instanceUrl.value = config.instanceUrl || "";
   form.accessToken.value = config.accessToken || "";
   form.apiVersion.value = config.apiVersion || "60.0";
-  includeMethodDetailsEl.checked = Boolean(config.includeMethodDetails);
+  includeMethodDetailsEl.setAttribute("aria-pressed", Boolean(config.includeMethodDetails));
 }
 
 async function persistConfig(config) {
@@ -73,11 +81,11 @@ async function loadCoverage() {
     instanceUrl: (form.instanceUrl.value || "").trim().replace(/\/+$/, ""),
     accessToken: (form.accessToken.value || "").trim(),
     apiVersion: (form.apiVersion.value || "").trim(),
-    includeMethodDetails: includeMethodDetailsEl.checked
+    includeMethodDetails: includeMethodDetailsEl.getAttribute("aria-pressed") === "true"
   };
 
   if (!config.instanceUrl || !config.accessToken || !config.apiVersion) {
-    setStatus("Please provide all configuration values.", "error");
+    setStatus("Session not loaded. Please ensure you're logged into Salesforce in your browser.", "error");
     return;
   }
 
@@ -335,10 +343,9 @@ async function fillSessionFromActiveTab() {
     form.instanceUrl.value = tabUrl.origin;
     form.accessToken.value = sidCookie.value;
 
-    const apiVersion = (form.apiVersion.value || "").trim();
-    if (!apiVersion) {
-      form.apiVersion.value = "60.0";
-    }
+    // Auto-detect API version from Salesforce
+    const apiVersion = await detectApiVersion(tabUrl.origin, sidCookie.value);
+    form.apiVersion.value = apiVersion;
 
     await persistConfig({
       instanceUrl: form.instanceUrl.value,
@@ -349,6 +356,35 @@ async function fillSessionFromActiveTab() {
     setStatus("Session imported from active Salesforce tab.", "success");
   } catch (error) {
     setStatus(getErrorMessage(error), "error");
+  }
+}
+
+async function detectApiVersion(instanceUrl, accessToken) {
+  try {
+    const response = await fetch(`${instanceUrl}/services/data/`, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        Accept: "application/json"
+      }
+    });
+
+    const payload = await response.json();
+    if (!response.ok) {
+      throw new Error("Failed to detect API version");
+    }
+
+    // Get the latest version from the list
+    if (Array.isArray(payload) && payload.length > 0) {
+      // Versions are returned as objects with 'version' property
+      const latestVersion = payload[payload.length - 1];
+      return latestVersion.version || "60.0";
+    }
+
+    return "60.0";
+  } catch (error) {
+    console.error("Error detecting API version:", error);
+    return "60.0"; // Fallback to default
   }
 }
 
@@ -414,7 +450,7 @@ function toCsvCell(value) {
 }
 
 async function handleMethodViewToggle() {
-  if (!includeMethodDetailsEl.checked || allRows.length === 0) {
+  if (includeMethodDetailsEl.getAttribute("aria-pressed") !== "true" || allRows.length === 0) {
     methodDetailsSectionEl.classList.add("hidden");
     methodDetailsBodyEl.innerHTML = "";
     methodDetailsTitleEl.textContent = "Method Coverage";
@@ -444,7 +480,7 @@ async function handleClassSelection(classId, className) {
   selectedClassId = classId;
   renderRows(visibleRows);
 
-  if (!includeMethodDetailsEl.checked) {
+  if (includeMethodDetailsEl.getAttribute("aria-pressed") !== "true") {
     return;
   }
 
