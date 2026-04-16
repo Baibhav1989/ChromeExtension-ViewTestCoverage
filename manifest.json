@@ -1,0 +1,22 @@
+{
+  "manifest_version": 3,
+  "name": "Apex Class Coverage Viewer",
+  "description": "List Salesforce Apex classes with code coverage.",
+  "version": "1.0.0",
+  "action": {
+    "default_title": "Apex Coverage",
+    "default_popup": "popup.html"
+  },
+  "permissions": [
+    "storage",
+    "tabs",
+    "cookies"
+  ],
+  "host_permissions": [
+    "https://*.salesforce.com/*",
+    "https://*.my.salesforce.com/*",
+    "https://*.sandbox.my.salesforce.com/*",
+    "https://*.force.com/*",
+    "https://*.lightning.force.com/*"
+  ]
+}
