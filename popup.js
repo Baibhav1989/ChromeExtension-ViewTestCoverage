@@ -2,6 +2,7 @@ const form = document.getElementById("config-form");
 const loadButton = document.getElementById("load-button");
 const sessionButton = document.getElementById("session-button");
 const exportButton = document.getElementById("export-button");
+const executeTestsButton = document.getElementById("execute-tests-button");
 const statusEl = document.getElementById("status");
 const summaryEl = document.getElementById("summary");
 const tableWrapperEl = document.getElementById("table-wrapper");
@@ -9,13 +10,22 @@ const coverageBodyEl = document.getElementById("coverage-body");
 const searchEl = document.getElementById("search");
 const searchLabelEl = document.getElementById("search-label");
 const includeMethodDetailsEl = document.getElementById("include-method-details");
+const excludePackagesEl = document.getElementById("exclude-packages");
 const methodDetailsSectionEl = document.getElementById("method-details");
 const methodDetailsTitleEl = document.getElementById("method-details-title");
 const methodDetailsHelpEl = document.getElementById("method-details-help");
 const methodDetailsBodyEl = document.getElementById("method-details-body");
+const testModalEl = document.getElementById("test-modal");
+const testClassesListEl = document.getElementById("test-classes-list");
+const modalCloseBtn = document.getElementById("modal-close");
+const modalCancelBtn = document.getElementById("modal-cancel");
+const selectAllBtn = document.getElementById("select-all-btn");
+const deselectAllBtn = document.getElementById("deselect-all-btn");
+const executeBtn = document.getElementById("execute-btn");
 
 let allRows = [];
 let visibleRows = [];
+let testClasses = [];
 let selectedClassId = null;
 let currentConfig = null;
 const methodCoverageCache = new Map();
@@ -47,15 +57,62 @@ function initialize() {
     await handleMethodViewToggle();
   });
 
+  excludePackagesEl.addEventListener("click", (event) => {
+    event.preventDefault();
+    toggleExcludePackages();
+    visibleRows = filterRows(allRows, searchEl.value);
+    renderRows(visibleRows);
+    renderSummary(visibleRows);
+  });
+
   searchEl.addEventListener("input", () => {
     visibleRows = filterRows(allRows, searchEl.value);
     renderRows(visibleRows);
+  });
+
+  executeTestsButton.addEventListener("click", () => {
+    showTestClassesModal();
+  });
+
+  modalCloseBtn.addEventListener("click", () => {
+    closeTestModal();
+  });
+
+  modalCancelBtn.addEventListener("click", () => {
+    closeTestModal();
+  });
+
+  selectAllBtn.addEventListener("click", () => {
+    document.querySelectorAll(".test-class-checkbox").forEach(checkbox => {
+      checkbox.checked = true;
+    });
+  });
+
+  deselectAllBtn.addEventListener("click", () => {
+    document.querySelectorAll(".test-class-checkbox").forEach(checkbox => {
+      checkbox.checked = false;
+    });
+  });
+
+  executeBtn.addEventListener("click", async () => {
+    await executeSelectedTests();
+  });
+
+  testModalEl.addEventListener("click", (event) => {
+    if (event.target === testModalEl) {
+      closeTestModal();
+    }
   });
 }
 
 function toggleMethodDetailsView() {
   const isPressed = includeMethodDetailsEl.getAttribute("aria-pressed") === "true";
   includeMethodDetailsEl.setAttribute("aria-pressed", !isPressed);
+}
+
+function toggleExcludePackages() {
+  const isPressed = excludePackagesEl.getAttribute("aria-pressed") === "true";
+  excludePackagesEl.setAttribute("aria-pressed", !isPressed);
 }
 
 async function restoreConfig() {
@@ -70,6 +127,7 @@ async function restoreConfig() {
   form.accessToken.value = config.accessToken || "";
   form.apiVersion.value = config.apiVersion || "60.0";
   includeMethodDetailsEl.setAttribute("aria-pressed", Boolean(config.includeMethodDetails));
+  excludePackagesEl.setAttribute("aria-pressed", Boolean(config.excludePackages));
 }
 
 async function persistConfig(config) {
@@ -81,7 +139,8 @@ async function loadCoverage() {
     instanceUrl: (form.instanceUrl.value || "").trim().replace(/\/+$/, ""),
     accessToken: (form.accessToken.value || "").trim(),
     apiVersion: (form.apiVersion.value || "").trim(),
-    includeMethodDetails: includeMethodDetailsEl.getAttribute("aria-pressed") === "true"
+    includeMethodDetails: includeMethodDetailsEl.getAttribute("aria-pressed") === "true",
+    excludePackages: excludePackagesEl.getAttribute("aria-pressed") === "true"
   };
 
   if (!config.instanceUrl || !config.accessToken || !config.apiVersion) {
@@ -109,18 +168,58 @@ async function loadCoverage() {
       "SELECT ApexClassOrTriggerId, NumLinesCovered, NumLinesUncovered FROM ApexCodeCoverageAggregate WHERE ApexClassOrTriggerId != null"
     );
 
-    allRows = buildCoverageRows(classes, coverage);
-    visibleRows = allRows.slice();
+    // Separate test classes from regular classes
+    const { regularClasses, testClassesList } = separateTestClasses(classes);
+    testClasses = testClassesList;
+
+    allRows = buildCoverageRows(regularClasses, coverage);
+    visibleRows = filterRows(allRows, searchEl.value);
     renderRows(visibleRows);
-    renderSummary(allRows);
+    renderSummary(visibleRows);
     toggleResults(true);
+    toggleTestButton(testClasses.length > 0);
     await handleMethodViewToggle();
-    setStatus(`Loaded ${allRows.length} Apex classes.`, "success");
+    setStatus(`Loaded ${allRows.length} Apex classes (${testClasses.length} test classes).`, "success");
   } catch (error) {
     setStatus(getErrorMessage(error), "error");
   } finally {
     setLoading(false);
   }
+}
+
+function separateTestClasses(classes) {
+  const regularClasses = [];
+  const testClassesList = [];
+
+  for (const apexClass of classes) {
+    if (isTestClass(apexClass)) {
+      testClassesList.push(apexClass);
+    } else {
+      regularClasses.push(apexClass);
+    }
+  }
+
+  return { regularClasses, testClassesList };
+}
+
+function isTestClass(apexClass) {
+  const name = (apexClass.Name || "").toLowerCase();
+
+  // Check if class name ends with "Test" or "Tests"
+  if (name.endsWith("test") || name.endsWith("tests")) {
+    return true;
+  }
+
+  // Check if class name starts with "Test"
+  if (name.startsWith("test")) {
+    return true;
+  }
+
+  return false;
+}
+
+function toggleTestButton(show) {
+  executeTestsButton.classList.toggle("hidden", !show);
 }
 
 async function queryAll(config, soql) {
@@ -233,11 +332,21 @@ function renderSummary(rows) {
 
 function filterRows(rows, term) {
   const normalized = (term || "").trim().toLowerCase();
-  if (!normalized) {
-    return rows;
-  }
+  const excludePackages = excludePackagesEl.getAttribute("aria-pressed") === "true";
 
-  return rows.filter((row) => row.name.toLowerCase().includes(normalized));
+  return rows.filter((row) => {
+    // Check name filter
+    if (normalized && !row.name.toLowerCase().includes(normalized)) {
+      return false;
+    }
+
+    // Check package exclusion
+    if (excludePackages && row.namespace !== "-") {
+      return false;
+    }
+
+    return true;
+  });
 }
 
 function clearResults() {
@@ -264,6 +373,7 @@ function setLoading(isLoading) {
   loadButton.disabled = isLoading;
   sessionButton.disabled = isLoading;
   exportButton.disabled = isLoading;
+  executeTestsButton.disabled = isLoading;
   includeMethodDetailsEl.disabled = isLoading;
   loadButton.textContent = isLoading ? "Loading..." : "Load Coverage";
 }
@@ -708,4 +818,134 @@ function countChar(text, char) {
     }
   }
   return count;
+}
+
+function showTestClassesModal() {
+  // Check if coverage has been loaded
+  if (testClasses.length === 0 || !currentConfig) {
+    setStatus("Please load coverage first before executing test classes.", "error");
+    return;
+  }
+
+  testClassesListEl.innerHTML = "";
+
+  const excludePackages = excludePackagesEl.getAttribute("aria-pressed") === "true";
+  
+  // Filter test classes based on exclude packages setting
+  const filteredTestClasses = testClasses.filter((testClass) => {
+    if (excludePackages && testClass.NamespacePrefix && testClass.NamespacePrefix !== "-") {
+      return false;
+    }
+    return true;
+  });
+
+  const listHtml = filteredTestClasses.map((testClass) => `
+    <div class="test-class-item">
+      <label>
+        <input type="checkbox" class="test-class-checkbox" value="${escapeHtml(testClass.Id)}" data-name="${escapeHtml(testClass.Name)}" />
+        ${escapeHtml(testClass.Name)}
+        <span class="test-namespace">${escapeHtml(testClass.NamespacePrefix || "-")}</span>
+      </label>
+    </div>
+  `).join("");
+
+  if (!listHtml) {
+    testClassesListEl.innerHTML = "<p style='text-align: center; color: #64748b;'>No test classes found.</p>";
+  } else {
+    testClassesListEl.innerHTML = listHtml;
+  }
+
+  testModalEl.classList.remove("hidden");
+}
+
+function closeTestModal() {
+  testModalEl.classList.add("hidden");
+}
+
+async function executeSelectedTests() {
+  const selectedCheckboxes = document.querySelectorAll(".test-class-checkbox:checked");
+
+  if (selectedCheckboxes.length === 0) {
+    setStatus("Please select at least one test class to execute.", "error");
+    return;
+  }
+
+  const selectedTestClassIds = Array.from(selectedCheckboxes).map(cb => ({
+    id: cb.value,
+    name: cb.getAttribute("data-name")
+  }));
+
+  setStatus("Executing test classes... This may take a few moments.", "");
+  closeTestModal();
+
+  try {
+    // Execute tests via Salesforce API
+    for (const testClass of selectedTestClassIds) {
+      await runTestClass(currentConfig, testClass.id, testClass.name);
+    }
+
+    setStatus(`Successfully executed ${selectedTestClassIds.length} test class(es).`, "success");
+  } catch (error) {
+    setStatus(getErrorMessage(error), "error");
+  }
+}
+
+async function runTestClass(config, classId, className) {
+  try {
+    // First, get the class name from the ID using SOQL
+    const classQuery = await queryAll(
+      config,
+      `SELECT Id, Name FROM ApexClass WHERE Id = '${escapeSoqlLiteral(classId)}'`
+    );
+
+    if (!classQuery || classQuery.length === 0) {
+      throw new Error(`Test class with ID ${classId} not found`);
+    }
+
+    const testClassName = classQuery[0].Name;
+
+    // Use Salesforce Tooling API to run tests with correct format
+    const requestBody = {
+      testLevel: "RunLocalTests",
+      tests: [
+        {
+          className: testClassName
+        }
+      ]
+    };
+
+    const response = await fetch(`${config.instanceUrl}/services/data/v${config.apiVersion}/tooling/runTestSynchronous`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${config.accessToken}`,
+        "Content-Type": "application/json",
+        Accept: "application/json"
+      },
+      body: JSON.stringify(requestBody)
+    });
+
+    const payload = await response.json();
+
+    if (!response.ok) {
+      throw new Error(`${extractSalesforceError(payload, response.status)}`);
+    }
+
+    // Check if tests passed
+    if (payload.numFailures && payload.numFailures > 0) {
+      console.warn(`Test class "${className}" had ${payload.numFailures} failure(s)`);
+      return {
+        success: false,
+        failures: payload.numFailures,
+        message: payload.totalTime ? `Failed in ${payload.totalTime}ms` : "Test failed"
+      };
+    }
+
+    return {
+      success: true,
+      totalTime: payload.totalTime || 0,
+      message: `Passed in ${payload.totalTime}ms`
+    };
+  } catch (error) {
+    throw new Error(`Failed to run test class "${className}": ${error.message}`);
+  }
 }
