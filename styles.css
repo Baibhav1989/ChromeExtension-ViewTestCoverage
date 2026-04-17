@@ -519,7 +519,8 @@ tbody tr:last-child td {
 
 .class-coverage-editor {
   max-height: calc(88vh - 220px);
-  overflow: auto;
+  overflow-x: auto;
+  overflow-y: auto;
   border: 1px solid #374151;
   border-radius: 10px;
   background: #0b0f14;
@@ -528,12 +529,15 @@ tbody tr:last-child td {
 
 .class-coverage-line {
   display: grid;
-  grid-template-columns: 72px 1fr;
+  grid-template-columns: 72px auto;
   align-items: flex-start;
   gap: 12px;
   padding: 6px 10px;
   font-size: 12px;
   line-height: 1.45;
+  min-width: 100%;
+  width: max-content;
+  position: relative;
 }
 
 .class-coverage-line-number {
@@ -541,11 +545,16 @@ tbody tr:last-child td {
   font-weight: 700;
   text-align: right;
   user-select: none;
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: #0b0f14;
+  padding-right: 8px;
 }
 
 .class-coverage-line-text {
   white-space: pre;
-  overflow-x: auto;
+  overflow: visible;
   color: #e5e7eb;
 }
 
