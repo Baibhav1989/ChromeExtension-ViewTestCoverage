@@ -35,6 +35,8 @@ const STORAGE_KEY = "apexCoverageConfig";
 initialize();
 
 function initialize() {
+  // Default: hide managed-package classes unless user changes it.
+  excludePackagesEl.setAttribute("aria-pressed", "true");
   restoreConfig();
   fillSessionFromActiveTab(); // Auto-load session on startup
 
@@ -127,6 +129,7 @@ async function restoreConfig() {
   const config = stored[STORAGE_KEY];
 
   if (!config) {
+    excludePackagesEl.setAttribute("aria-pressed", "true");
     return;
   }
 
@@ -134,7 +137,7 @@ async function restoreConfig() {
   form.accessToken.value = config.accessToken || "";
   form.apiVersion.value = config.apiVersion || "60.0";
   includeMethodDetailsEl.setAttribute("aria-pressed", Boolean(config.includeMethodDetails));
-  excludePackagesEl.setAttribute("aria-pressed", Boolean(config.excludePackages));
+  excludePackagesEl.setAttribute("aria-pressed", config.excludePackages ?? true);
 }
 
 async function persistConfig(config) {
