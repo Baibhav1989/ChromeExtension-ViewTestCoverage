@@ -306,6 +306,63 @@ tbody tr:hover {
   display: none !important;
 }
 
+.test-execution-results {
+  margin-top: 16px;
+  background: linear-gradient(135deg, #ffffff 0%, #f9fafc 100%);
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.08);
+}
+
+.test-execution-results.hidden {
+  display: none !important;
+}
+
+.test-execution-results h2 {
+  margin: 0 0 12px;
+  font-size: 16px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.test-status {
+  display: inline-block;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-weight: 700;
+}
+
+.test-status-passed,
+.test-status-completed {
+  color: #059669;
+  background: #d1fae5;
+}
+
+.test-status-processing,
+.test-status-preparing,
+.test-status-queued {
+  color: #0369a1;
+  background: #e0f2fe;
+}
+
+.test-status-failed,
+.test-status-aborted,
+.test-status-compilefail {
+  color: #b91c1c;
+  background: #fee2e2;
+}
+
+.test-status-skipped {
+  color: #92400e;
+  background: #fef3c7;
+}
+
+.test-error-cell {
+  max-width: 420px;
+  white-space: normal;
+  word-break: break-word;
+}
+
 .method-details h2 {
   margin: 0 0 12px;
   font-size: 16px;

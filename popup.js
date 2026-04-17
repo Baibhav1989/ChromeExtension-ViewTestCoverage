@@ -35,12 +35,19 @@ const modalCancelBtn = document.getElementById("modal-cancel");
 const selectAllBtn = document.getElementById("select-all-btn");
 const deselectAllBtn = document.getElementById("deselect-all-btn");
 const executeBtn = document.getElementById("execute-btn");
+const testExecutionResultsSectionEl = document.getElementById("test-execution-results");
+const testExecutionHelpEl = document.getElementById("test-execution-help");
+const testExecutionBodyEl = document.getElementById("test-execution-body");
+
+const TERMINAL_TEST_QUEUE_STATUSES = new Set(["Completed", "Failed", "Aborted"]);
+const POLLING_TEST_QUEUE_STATUSES = new Set(["Queued", "Preparing", "Holding", "Processing"]);
 
 let allRows = [];
 let visibleRows = [];
 let testClasses = [];
 let selectedClassId = null;
 let currentConfig = null;
+let isTestExecutionInProgress = false;
 const methodCoverageCache = new Map();
 
 const STORAGE_KEY = "apexCoverageConfig";
@@ -132,6 +139,7 @@ async function initialize() {
 
   // Ensure method details section is hidden on initialization
   methodDetailsSectionEl.classList.add("hidden");
+  testExecutionResultsSectionEl.classList.add("hidden");
 
   // Disable export and execute buttons on initialization
   exportButton.disabled = true;
@@ -1017,37 +1025,401 @@ async function executeSelectedTests() {
     return;
   }
 
-  const selectedTestClassIds = Array.from(selectedCheckboxes).map(cb => ({
+  if (isTestExecutionInProgress) {
+    setStatus("Test execution is already in progress. Please wait for completion.", "error");
+    return;
+  }
+
+  const selectedTestClasses = Array.from(selectedCheckboxes).map((cb) => ({
     id: cb.value,
     name: cb.getAttribute("data-name")
   }));
 
+  const executionStartedAt = Date.now();
+  setExecutionUiState(true);
+  initializeTestExecutionTable(selectedTestClasses);
   setStatus("Queueing test classes in Salesforce Test Execution...", "");
   closeTestModal();
 
   try {
     // Queue tests via Salesforce Tooling API (async so runs appear in org Test Execution)
     const queuedRunIds = [];
-    for (const testClass of selectedTestClassIds) {
+    for (const testClass of selectedTestClasses) {
       const result = await runTestClass(currentConfig, testClass.id, testClass.name);
       if (result && result.runId) {
         queuedRunIds.push(result.runId);
       }
     }
 
-    await openApexTestQueuePage(currentConfig.instanceUrl);
-
-    const queuedText = queuedRunIds.length > 0
-      ? ` Run IDs: ${queuedRunIds.join(", ")}.`
-      : "";
-    setStatus(
-      `Queued ${selectedTestClassIds.length} test class(es) in Salesforce.${queuedText} ` +
-        "Apex Test Queue opened. After test execution completes, reload coverage to see updated results.",
-      "success"
-    );
+    const uniqueRunIds = Array.from(new Set(queuedRunIds.filter(Boolean)));
+    await monitorTestExecution({
+      config: currentConfig,
+      selectedTestClasses,
+      runIds: uniqueRunIds,
+      executionStartedAt
+    });
   } catch (error) {
     setStatus(getErrorMessage(error), "error");
+  } finally {
+    setExecutionUiState(false);
   }
+}
+
+function setExecutionUiState(isRunning) {
+  isTestExecutionInProgress = isRunning;
+  loadButton.disabled = isRunning;
+  executeTestsButton.disabled = isRunning || allRows.length === 0;
+  includeMethodDetailsEl.disabled = isRunning;
+  executeBtn.disabled = isRunning;
+  selectAllBtn.disabled = isRunning;
+  deselectAllBtn.disabled = isRunning;
+}
+
+function initializeTestExecutionTable(selectedTestClasses) {
+  testExecutionResultsSectionEl.classList.remove("hidden");
+  testExecutionHelpEl.textContent =
+    "Execution started. Tracking queue status for selected test classes...";
+  renderExecutionProgressRows(selectedTestClasses, new Map(), true);
+}
+
+async function monitorTestExecution({ config, selectedTestClasses, runIds, executionStartedAt }) {
+  const selectedClassIds = selectedTestClasses.map((item) => item.id);
+  const maxPollAttempts = 120;
+
+  for (let attempt = 1; attempt <= maxPollAttempts; attempt += 1) {
+    const queueItems = await fetchRelevantQueueItems(config, runIds, selectedClassIds, executionStartedAt);
+    const latestQueueByClass = groupLatestQueueItemByClass(queueItems);
+    const summary = summarizeQueueExecution(selectedTestClasses, latestQueueByClass);
+
+    renderExecutionProgressRows(selectedTestClasses, latestQueueByClass, false);
+    testExecutionHelpEl.textContent =
+      `Running: ${summary.running}, queued: ${summary.queued}, ` +
+      `completed: ${summary.completed}/${summary.total}, failed: ${summary.failed}, aborted: ${summary.aborted}.`;
+
+    const statusType = summary.failed > 0 || summary.aborted > 0 ? "error" : "";
+    setStatus(
+      `Test execution in progress (${summary.completed}/${summary.total} completed, ` +
+      `${summary.running} running, ${summary.failed} failed).`,
+      statusType
+    );
+
+    if (summary.isFinished) {
+      const failedResults = await fetchFailedMethodResults(
+        config,
+        runIds,
+        selectedClassIds,
+        executionStartedAt
+      );
+      renderExecutionFinalRows(selectedTestClasses, latestQueueByClass, failedResults);
+
+      const hasFailures = summary.failed > 0 || summary.aborted > 0 || failedResults.length > 0;
+      if (hasFailures) {
+        setStatus(
+          "Test execution completed with failures. Check Test Class Execution Result for failed methods and errors.",
+          "error"
+        );
+      } else {
+        setStatus("Test execution completed successfully. Reloading coverage...", "success");
+        await loadCoverage();
+        setStatus("Test execution completed successfully and coverage is refreshed.", "success");
+      }
+      return;
+    }
+
+    await sleep(3000);
+  }
+
+  throw new Error("Timed out while waiting for test execution to finish.");
+}
+
+async function fetchRelevantQueueItems(config, runIds, selectedClassIds, executionStartedAt) {
+  const fields =
+    "Id, ApexClassId, ApexClass.Name, Status, ExtendedStatus, ParentJobId, TestRunResultId, CreatedDate";
+  const queries = [];
+  const runIdClause = buildSoqlInClause(runIds);
+  const classIdClause = buildSoqlInClause(selectedClassIds);
+
+  if (runIdClause) {
+    queries.push(
+      `SELECT ${fields} FROM ApexTestQueueItem WHERE ParentJobId IN (${runIdClause}) ORDER BY CreatedDate DESC`
+    );
+    queries.push(`SELECT ${fields} FROM ApexTestQueueItem WHERE Id IN (${runIdClause}) ORDER BY CreatedDate DESC`);
+    queries.push(
+      `SELECT ${fields} FROM ApexTestQueueItem WHERE TestRunResultId IN (${runIdClause}) ORDER BY CreatedDate DESC`
+    );
+  }
+
+  if (classIdClause) {
+    queries.push(
+      `SELECT ${fields} FROM ApexTestQueueItem WHERE ApexClassId IN (${classIdClause}) ORDER BY CreatedDate DESC`
+    );
+  }
+
+  const dedupedById = new Map();
+  for (const query of queries) {
+    try {
+      const rows = await queryAll(config, query);
+      for (const row of rows) {
+        if (!row || !row.Id) {
+          continue;
+        }
+        dedupedById.set(row.Id, row);
+      }
+      if (dedupedById.size > 0 && runIdClause) {
+        break;
+      }
+    } catch (_error) {
+      // Ignore query shape mismatches and continue to the next fallback query.
+    }
+  }
+
+  const createdAtThreshold = executionStartedAt - 120000;
+  return Array.from(dedupedById.values()).filter((row) => {
+    const createdAt = Date.parse(row.CreatedDate || "");
+    if (!Number.isFinite(createdAt)) {
+      return true;
+    }
+    return createdAt >= createdAtThreshold;
+  });
+}
+
+function groupLatestQueueItemByClass(queueItems) {
+  const byClassId = new Map();
+
+  for (const item of queueItems) {
+    const classId = item.ApexClassId;
+    if (!classId) {
+      continue;
+    }
+
+    const existing = byClassId.get(classId);
+    if (!existing) {
+      byClassId.set(classId, item);
+      continue;
+    }
+
+    const existingCreated = Date.parse(existing.CreatedDate || "") || 0;
+    const currentCreated = Date.parse(item.CreatedDate || "") || 0;
+    if (currentCreated >= existingCreated) {
+      byClassId.set(classId, item);
+    }
+  }
+
+  return byClassId;
+}
+
+function summarizeQueueExecution(selectedTestClasses, latestQueueByClass) {
+  const summary = {
+    total: selectedTestClasses.length,
+    completed: 0,
+    failed: 0,
+    aborted: 0,
+    running: 0,
+    queued: 0,
+    waiting: 0,
+    isFinished: false
+  };
+
+  for (const testClass of selectedTestClasses) {
+    const queueItem = latestQueueByClass.get(testClass.id);
+    if (!queueItem) {
+      summary.waiting += 1;
+      continue;
+    }
+
+    const status = normalizeQueueStatus(queueItem.Status);
+    if (status === "Completed") {
+      summary.completed += 1;
+    } else if (status === "Failed") {
+      summary.failed += 1;
+    } else if (status === "Aborted") {
+      summary.aborted += 1;
+    } else if (POLLING_TEST_QUEUE_STATUSES.has(status)) {
+      if (status === "Queued" || status === "Holding") {
+        summary.queued += 1;
+      } else {
+        summary.running += 1;
+      }
+    } else if (TERMINAL_TEST_QUEUE_STATUSES.has(status)) {
+      summary.failed += 1;
+    } else {
+      summary.running += 1;
+    }
+  }
+
+  summary.isFinished =
+    summary.total > 0 &&
+    summary.waiting === 0 &&
+    summary.completed + summary.failed + summary.aborted === summary.total;
+
+  return summary;
+}
+
+function renderExecutionProgressRows(selectedTestClasses, latestQueueByClass, isInitializing) {
+  testExecutionBodyEl.innerHTML = "";
+
+  for (const testClass of selectedTestClasses) {
+    const queueItem = latestQueueByClass.get(testClass.id);
+    const status = queueItem ? normalizeQueueStatus(queueItem.Status) : "Queued";
+    const errorMessage = queueItem
+      ? queueItem.ExtendedStatus || "-"
+      : isInitializing
+        ? "Waiting for Salesforce queue confirmation..."
+        : "Still waiting for queue item creation...";
+
+    appendTestExecutionRow({
+      className: testClass.name,
+      failedMethod: "-",
+      status,
+      errorMessage
+    });
+  }
+}
+
+function renderExecutionFinalRows(selectedTestClasses, latestQueueByClass, failedResults) {
+  testExecutionBodyEl.innerHTML = "";
+
+  for (const testClass of selectedTestClasses) {
+    const queueItem = latestQueueByClass.get(testClass.id);
+    const status = queueItem ? normalizeQueueStatus(queueItem.Status) : "Unknown";
+    const errorMessage = queueItem && queueItem.ExtendedStatus ? queueItem.ExtendedStatus : "-";
+
+    appendTestExecutionRow({
+      className: testClass.name,
+      failedMethod: "-",
+      status,
+      errorMessage
+    });
+  }
+
+  if (failedResults.length === 0) {
+    testExecutionHelpEl.textContent = "All selected test classes executed successfully.";
+    return;
+  }
+
+  const renderedFailureKeys = new Set();
+  for (const item of failedResults) {
+    const className =
+      (item.ApexClass && item.ApexClass.Name) ||
+      item.className ||
+      "UnknownClass";
+    const methodName = item.MethodName || item.methodName || "UnknownMethod";
+    const status = item.Outcome || "Failed";
+    const message = item.Message || item.StackTrace || "No error details returned.";
+    const dedupeKey = `${className}::${methodName}::${status}::${message}`;
+
+    if (renderedFailureKeys.has(dedupeKey)) {
+      continue;
+    }
+    renderedFailureKeys.add(dedupeKey);
+
+    appendTestExecutionRow({
+      className,
+      failedMethod: methodName,
+      status,
+      errorMessage: message
+    });
+  }
+
+  testExecutionHelpEl.textContent =
+    "Execution finished with failures. Failed methods and error messages are listed below.";
+}
+
+function appendTestExecutionRow({ className, failedMethod, status, errorMessage }) {
+  const statusLabel = String(status || "Unknown");
+  const tr = document.createElement("tr");
+  tr.innerHTML = `
+    <td>${escapeHtml(className || "UnknownClass")}</td>
+    <td>${escapeHtml(failedMethod || "-")}</td>
+    <td><span class="${getTestStatusClass(statusLabel)}">${escapeHtml(statusLabel)}</span></td>
+    <td class="test-error-cell">${escapeHtml(errorMessage || "-")}</td>
+  `;
+  testExecutionBodyEl.appendChild(tr);
+}
+
+function getTestStatusClass(status) {
+  const normalized = String(status || "").trim().toLowerCase();
+  if (normalized === "pass" || normalized === "passed" || normalized === "completed") {
+    return "test-status test-status-completed";
+  }
+  if (normalized === "queued" || normalized === "preparing" || normalized === "holding") {
+    return "test-status test-status-queued";
+  }
+  if (normalized === "processing") {
+    return "test-status test-status-processing";
+  }
+  if (normalized === "skip" || normalized === "skipped") {
+    return "test-status test-status-skipped";
+  }
+  if (normalized === "compilefail") {
+    return "test-status test-status-compilefail";
+  }
+  if (normalized === "abort" || normalized === "aborted") {
+    return "test-status test-status-aborted";
+  }
+  if (normalized === "fail" || normalized === "failed") {
+    return "test-status test-status-failed";
+  }
+  return "test-status test-status-failed";
+}
+
+function normalizeQueueStatus(status) {
+  return String(status || "Queued").trim();
+}
+
+async function fetchFailedMethodResults(config, runIds, classIds, executionStartedAt) {
+  const classIdClause = buildSoqlInClause(classIds);
+  const runIdClause = buildSoqlInClause(runIds);
+  const conditions = ["Outcome != 'Pass'"];
+
+  if (runIdClause && classIdClause) {
+    conditions.push(`(AsyncApexJobId IN (${runIdClause}) OR ApexClassId IN (${classIdClause}))`);
+  } else if (runIdClause) {
+    conditions.push(`AsyncApexJobId IN (${runIdClause})`);
+  } else if (classIdClause) {
+    conditions.push(`ApexClassId IN (${classIdClause})`);
+  }
+
+  const baseQuery =
+    "SELECT ApexClassId, ApexClass.Name, MethodName, Outcome, Message, StackTrace, AsyncApexJobId, TestTimestamp " +
+    `FROM ApexTestResult WHERE ${conditions.join(" AND ")} ORDER BY TestTimestamp DESC LIMIT 500`;
+  let rows = [];
+
+  try {
+    rows = await queryAll(config, baseQuery);
+  } catch (_error) {
+    if (!classIdClause) {
+      return [];
+    }
+    const fallbackQuery =
+      "SELECT ApexClassId, ApexClass.Name, MethodName, Outcome, Message, StackTrace, TestTimestamp " +
+      `FROM ApexTestResult WHERE ApexClassId IN (${classIdClause}) AND Outcome != 'Pass' ` +
+      "ORDER BY TestTimestamp DESC LIMIT 500";
+    rows = await queryAll(config, fallbackQuery);
+  }
+
+  const createdAtThreshold = executionStartedAt - 120000;
+  return rows.filter((row) => {
+    const testTimestamp = Date.parse(row.TestTimestamp || "");
+    if (!Number.isFinite(testTimestamp)) {
+      return true;
+    }
+    return testTimestamp >= createdAtThreshold;
+  });
+}
+
+function buildSoqlInClause(values) {
+  const normalized = Array.from(new Set((values || []).filter(Boolean).map((value) => String(value).trim())));
+  if (normalized.length === 0) {
+    return "";
+  }
+  return normalized.map((value) => `'${escapeSoqlLiteral(value)}'`).join(", ");
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
 }
 
 async function runTestClass(config, classId, className) {
@@ -1166,20 +1538,4 @@ function extractAsyncTestRunId(payload) {
   }
 
   return null;
-}
-
-async function openApexTestQueuePage(instanceUrl) {
-  const queueUrl = buildApexTestQueueUrl(instanceUrl);
-  await chrome.tabs.create({ url: queueUrl });
-}
-
-function buildApexTestQueueUrl(instanceUrl) {
-  let baseUrl = String(instanceUrl || "").trim().replace(/\/+$/, "");
-  if (!baseUrl) {
-    throw new Error("Missing Salesforce instance URL.");
-  }
-
-  // Lightning setup pages are served from the lightning.force.com host.
-  baseUrl = baseUrl.replace(/\.my\.salesforce\.com$/i, ".lightning.force.com");
-  return `${baseUrl}/lightning/setup/ApexTestQueue/home`;
 }
