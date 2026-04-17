@@ -90,13 +90,14 @@ async function initialize() {
     toggleExcludePackages();
     visibleRows = filterRows(allRows, searchEl.value);
     renderRows(visibleRows);
-    renderSummary(visibleRows);
+    renderSummary(getSummaryRows(allRows));
   });
 
   // Real-time search filtering
   searchEl.addEventListener("input", () => {
     visibleRows = filterRows(allRows, searchEl.value);
     renderRows(visibleRows);
+    renderSummary(getSummaryRows(allRows));
   });
 
   // Test execution
@@ -222,7 +223,7 @@ async function loadCoverage() {
     allRows = buildCoverageRows(regularClasses, coverage);
     visibleRows = filterRows(allRows, searchEl.value);
     renderRows(visibleRows);
-    renderSummary(visibleRows);
+    renderSummary(getSummaryRows(allRows));
     toggleResults(true);
     toggleTestButton(testClasses.length > 0);
     await handleMethodViewToggle();
@@ -385,6 +386,15 @@ function renderSummary(rows) {
     <span><span class="metric">Uncovered Lines:</span> ${uncovered}</span>
     <span><span class="metric">Overall Coverage:</span> ${coverageText}</span>
   `;
+}
+
+function getSummaryRows(rows) {
+  const excludePackages = excludePackagesEl.getAttribute("aria-pressed") === "true";
+  if (!excludePackages) {
+    return rows;
+  }
+
+  return rows.filter((row) => row.namespace === "-");
 }
 
 /**
