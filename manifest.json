@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Apex Class Coverage Viewer",
   "description": "View Salesforce Apex code coverage by class with detailed metrics and test method analysis.",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "author": "Baibahv Kumar",
   "icons": {
     "16": "icon-16x16.png",
