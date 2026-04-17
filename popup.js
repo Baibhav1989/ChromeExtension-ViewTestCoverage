@@ -951,11 +951,14 @@ async function executeSelectedTests() {
       }
     }
 
+    await openApexTestQueuePage(currentConfig.instanceUrl);
+
     const queuedText = queuedRunIds.length > 0
       ? ` Run IDs: ${queuedRunIds.join(", ")}.`
       : "";
     setStatus(
-      `Queued ${selectedTestClassIds.length} test class(es) in Salesforce.${queuedText}`,
+      `Queued ${selectedTestClassIds.length} test class(es) in Salesforce.${queuedText} ` +
+        "Apex Test Queue opened. After test execution completes, reload coverage to see updated results.",
       "success"
     );
   } catch (error) {
@@ -1079,4 +1082,20 @@ function extractAsyncTestRunId(payload) {
   }
 
   return null;
+}
+
+async function openApexTestQueuePage(instanceUrl) {
+  const queueUrl = buildApexTestQueueUrl(instanceUrl);
+  await chrome.tabs.create({ url: queueUrl });
+}
+
+function buildApexTestQueueUrl(instanceUrl) {
+  let baseUrl = String(instanceUrl || "").trim().replace(/\/+$/, "");
+  if (!baseUrl) {
+    throw new Error("Missing Salesforce instance URL.");
+  }
+
+  // Lightning setup pages are served from the lightning.force.com host.
+  baseUrl = baseUrl.replace(/\.my\.salesforce\.com$/i, ".lightning.force.com");
+  return `${baseUrl}/lightning/setup/ApexTestQueue/home`;
 }
