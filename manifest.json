@@ -1,15 +1,16 @@
 {
   "manifest_version": 3,
   "name": "Apex Class Coverage Viewer",
-  "description": "List Salesforce Apex classes with code coverage.",
+  "description": "View Salesforce Apex code coverage by class with detailed metrics. Integrates with Salesforce Tooling API to show covered/uncovered lines and test method mappings.",
   "version": "1.0.0",
+  "author": "Baibahv Kumar",
   "icons": {
     "16": "icon-16x16.svg",
     "48": "icon-48x48.svg",
     "128": "icon-128x128.svg"
   },
   "action": {
-    "default_title": "Apex Coverage",
+    "default_title": "Apex Coverage Viewer",
     "default_popup": "popup.html",
     "default_icon": "icon-48x48.svg"
   },

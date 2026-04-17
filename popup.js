@@ -1,3 +1,16 @@
+/**
+ * Apex Coverage Viewer Chrome Extension
+ * Version: 1.0.0
+ * Author: Baibahv Kumar
+ * 
+ * This extension integrates with Salesforce Tooling API to provide:
+ * - Real-time Apex class coverage metrics
+ * - Per-class line coverage analysis
+ * - Test method mapping to coverage
+ * - Export functionality for coverage reports
+ */
+
+// DOM element references for better readability and caching
 const form = document.getElementById("config-form");
 const loadButton = document.getElementById("load-button");
 const sessionButton = document.getElementById("session-button");
@@ -41,25 +54,30 @@ async function initialize() {
   await restoreConfig();
   fillSessionFromActiveTab(); // Auto-load session on startup
 
+  // Form submission and coverage loading
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
     await loadCoverage();
   });
 
+  // Session/token management
   sessionButton.addEventListener("click", async () => {
     await fillSessionFromActiveTab();
   });
 
+  // CSV export functionality
   exportButton.addEventListener("click", () => {
     exportVisibleRowsToCsv();
   });
 
+  // Toggle method-wise view
   includeMethodDetailsEl.addEventListener("click", async (event) => {
     event.preventDefault();
     toggleMethodDetailsView();
     await handleMethodViewToggle();
   });
 
+  // Filter package classes
   excludePackagesEl.addEventListener("click", (event) => {
     event.preventDefault();
     toggleExcludePackages();
@@ -68,15 +86,18 @@ async function initialize() {
     renderSummary(visibleRows);
   });
 
+  // Real-time search filtering
   searchEl.addEventListener("input", () => {
     visibleRows = filterRows(allRows, searchEl.value);
     renderRows(visibleRows);
   });
 
+  // Test execution
   executeTestsButton.addEventListener("click", () => {
     showTestClassesModal();
   });
 
+  // Modal controls
   modalCloseBtn.addEventListener("click", () => {
     closeTestModal();
   });
@@ -85,6 +106,7 @@ async function initialize() {
     closeTestModal();
   });
 
+  // Test class selection
   selectAllBtn.addEventListener("click", () => {
     document.querySelectorAll(".test-class-checkbox").forEach(checkbox => {
       checkbox.checked = true;
@@ -101,6 +123,7 @@ async function initialize() {
     await executeSelectedTests();
   });
 
+  // Modal backdrop click handler
   testModalEl.addEventListener("click", (event) => {
     if (event.target === testModalEl) {
       closeTestModal();
@@ -145,6 +168,11 @@ async function persistConfig(config) {
   await chrome.storage.local.set({ [STORAGE_KEY]: config });
 }
 
+/**
+ * Loads coverage data from Salesforce Tooling API
+ * Queries ApexClass and ApexCodeCoverageAggregate objects
+ * Separates test classes and renders results with filtering
+ */
 async function loadCoverage() {
   const config = {
     instanceUrl: (form.instanceUrl.value || "").trim().replace(/\/+$/, ""),
@@ -285,6 +313,10 @@ function buildCoverageRows(classes, coverageRecords) {
   });
 }
 
+/**
+ * Renders coverage data rows as table rows with interactive selection
+ * @param {Array} rows - Coverage rows to render in the table
+ */
 function renderRows(rows) {
   coverageBodyEl.innerHTML = "";
 
@@ -321,6 +353,11 @@ function renderRows(rows) {
   }
 }
 
+/**
+ * Renders overall coverage summary statistics
+ * Calculates aggregate metrics across filtered rows
+ * @param {Array} rows - Rows to calculate summary from
+ */
 function renderSummary(rows) {
   let covered = 0;
   let uncovered = 0;
@@ -342,6 +379,12 @@ function renderSummary(rows) {
   `;
 }
 
+/**
+ * Filters coverage rows based on search term and package exclusion setting
+ * @param {Array} rows - Coverage data rows to filter
+ * @param {string} term - Search term to match class names
+ * @returns {Array} Filtered rows matching criteria
+ */
 function filterRows(rows, term) {
   const normalized = (term || "").trim().toLowerCase();
   const excludePackages = excludePackagesEl.getAttribute("aria-pressed") === "true";
