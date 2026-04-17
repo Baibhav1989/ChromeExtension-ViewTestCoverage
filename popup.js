@@ -55,9 +55,6 @@ const STORAGE_KEY = "apexCoverageConfig";
 initialize();
 
 async function initialize() {
-  // Default: enable method-wise view unless user changes it.
-  includeMethodDetailsEl.setAttribute("aria-pressed", "true");
-
   // Default: hide managed-package classes unless user changes it.
   excludePackagesEl.setAttribute("aria-pressed", "true");
   excludePackagesEl.disabled = false; // Enable the exclude packages button by default
@@ -165,7 +162,6 @@ async function restoreConfig() {
   const config = stored[STORAGE_KEY];
 
   if (!config) {
-    includeMethodDetailsEl.setAttribute("aria-pressed", "true");
     excludePackagesEl.setAttribute("aria-pressed", "true");
     return;
   }
@@ -173,10 +169,7 @@ async function restoreConfig() {
   form.instanceUrl.value = config.instanceUrl || "";
   form.accessToken.value = config.accessToken || "";
   form.apiVersion.value = config.apiVersion || "60.0";
-  includeMethodDetailsEl.setAttribute(
-    "aria-pressed",
-    config.includeMethodDetails ?? true
-  );
+  includeMethodDetailsEl.setAttribute("aria-pressed", Boolean(config.includeMethodDetails));
   excludePackagesEl.setAttribute("aria-pressed", config.excludePackages ?? true);
 }
 
