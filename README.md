@@ -10,8 +10,9 @@ This extension connects to Salesforce Tooling API and shows:
 ## Files
 
 - `manifest.json` - Extension metadata and permissions
-- `popup.html` - Popup user interface
-- `styles.css` - Popup styles
+- `background.js` - Opens the extension UI in a new window
+- `popup.html` - Extension user interface page
+- `styles.css` - Extension UI styles
 - `popup.js` - Salesforce API integration and rendering logic
 
 ## Load the extension
@@ -36,7 +37,7 @@ What it does:
 
 ## How to use
 
-1. Click the extension icon
+1. Click the extension icon (opens the extension UI in a new maximized window)
 2. Optional: open any logged-in Salesforce tab and click **Use Logged-in Tab Session** to auto-fill URL and token
 3. Or enter manually:
    - **Salesforce Instance URL**  
@@ -59,7 +60,7 @@ and combines the results in a table.
 ## Notes
 
 - The token is stored in Chrome local extension storage for convenience.
-- Session import reads Salesforce `sid` from the active tab cookie.
+- Session import reads Salesforce `sid` from the most recently active Salesforce tab cookie.
 - If you run into auth issues, refresh your OAuth token and try again.
 
 

@@ -93,6 +93,7 @@ ZIP_PATH="$DIST_DIR/$ZIP_NAME"
 
 FILES_TO_PACKAGE=(
   "manifest.json"
+  "background.js"
   "popup.html"
   "popup.js"
   "styles.css"

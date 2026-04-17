@@ -492,12 +492,12 @@ function escapeHtml(value) {
 }
 
 async function fillSessionFromActiveTab() {
-  setStatus("Reading session from active Salesforce tab...", "");
+  setStatus("Reading session from a Salesforce tab...", "");
 
   try {
-    const tab = await getActiveTab();
+    const tab = await getPreferredSalesforceTab();
     if (!tab || !tab.url) {
-      throw new Error("No active browser tab found.");
+      throw new Error("No Salesforce tab found. Open Salesforce and try again.");
     }
 
     const tabUrl = new URL(tab.url);
@@ -526,7 +526,7 @@ async function fillSessionFromActiveTab() {
       apiVersion: form.apiVersion.value
     });
 
-    setStatus("Session imported from active Salesforce tab.", "success");
+    setStatus("Session imported from Salesforce tab.", "success");
   } catch (error) {
     setStatus(getErrorMessage(error), "error");
   }
@@ -631,12 +631,35 @@ function isSalesforceHost(hostname) {
   );
 }
 
-async function getActiveTab() {
+async function getPreferredSalesforceTab() {
   const tabs = await chrome.tabs.query({
     active: true,
     lastFocusedWindow: true
   });
-  return tabs[0] || null;
+  const activeTab = tabs[0] || null;
+  if (isSalesforceTab(activeTab)) {
+    return activeTab;
+  }
+
+  const allTabs = await chrome.tabs.query({});
+  const salesforceTabs = allTabs
+    .filter((tab) => isSalesforceTab(tab))
+    .sort((a, b) => (b.lastAccessed || 0) - (a.lastAccessed || 0));
+
+  return salesforceTabs[0] || null;
+}
+
+function isSalesforceTab(tab) {
+  if (!tab || !tab.url) {
+    return false;
+  }
+
+  try {
+    const tabUrl = new URL(tab.url);
+    return isSalesforceHost(tabUrl.hostname);
+  } catch (_error) {
+    return false;
+  }
 }
 
 function exportVisibleRowsToCsv() {
