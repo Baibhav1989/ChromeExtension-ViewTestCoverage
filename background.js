@@ -6,15 +6,15 @@ chrome.action.onClicked.addListener(async () => {
   try {
     await chrome.windows.create({
       url: extensionPageUrl,
-      type: "popup",
+      type: "normal",
       state: "maximized"
     });
   } catch (error) {
-    // Some Chrome builds may reject "maximized" for popup windows.
+    // Some Chrome builds may reject "maximized" on window creation.
     console.error("Failed to open maximized extension window:", error);
     await chrome.windows.create({
       url: extensionPageUrl,
-      type: "popup"
+      type: "normal"
     });
   }
 });
