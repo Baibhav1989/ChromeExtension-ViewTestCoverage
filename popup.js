@@ -1081,7 +1081,7 @@ async function showClassCoverageModal(classId, className) {
   classCoverageModalEl.classList.remove("hidden");
   classCoverageTitleEl.textContent = `Class Coverage - ${className}`;
   classCoverageSummaryEl.textContent = "Loading covered and uncovered lines...";
-  classCoverageBodyEl.innerHTML = "<tr><td colspan=\"3\">Loading...</td></tr>";
+  classCoverageBodyEl.innerHTML = "<div class=\"class-coverage-message\">Loading...</div>";
 
   try {
     const details = await getClassCoverageDetails(classId);
@@ -1089,7 +1089,7 @@ async function showClassCoverageModal(classId, className) {
   } catch (error) {
     classCoverageSummaryEl.textContent = "Could not load class coverage details.";
     classCoverageBodyEl.innerHTML =
-      `<tr><td colspan="3">${escapeHtml(getErrorMessage(error))}</td></tr>`;
+      `<div class="class-coverage-message class-coverage-message-error">${escapeHtml(getErrorMessage(error))}</div>`;
   }
 }
 
@@ -1179,34 +1179,32 @@ function renderClassCoverageModal(details, className) {
 
   if (!details.lineItems || details.lineItems.length === 0) {
     classCoverageBodyEl.innerHTML =
-      "<tr><td colspan=\"3\">No line-level coverage data returned for this class.</td></tr>";
+      "<div class=\"class-coverage-message\">No line-level coverage data returned for this class.</div>";
     return;
   }
 
   for (const item of details.lineItems) {
-    const tr = document.createElement("tr");
-    tr.className = getClassCoverageRowClass(item.status);
-    tr.innerHTML = `
-      <td class="class-coverage-line-number">${item.lineNumber}</td>
-      <td>
-        <span class="${getClassCoverageStatusClass(item.status)}">${escapeHtml(item.status)}</span>
-      </td>
-      <td class="class-coverage-code-cell"><code>${escapeHtml(item.code)}</code></td>
-    `;
-    classCoverageBodyEl.appendChild(tr);
+    const lineEl = document.createElement("div");
+    lineEl.className = `class-coverage-line ${getClassCoverageLineClass(item.status)}`;
+
+    const lineNumberEl = document.createElement("span");
+    lineNumberEl.className = "class-coverage-line-number";
+    lineNumberEl.textContent = String(item.lineNumber);
+
+    const codeEl = document.createElement("span");
+    codeEl.className = "class-coverage-line-text";
+    codeEl.textContent = item.code || "";
+
+    lineEl.appendChild(lineNumberEl);
+    lineEl.appendChild(codeEl);
+    classCoverageBodyEl.appendChild(lineEl);
   }
 }
 
-function getClassCoverageStatusClass(status) {
+function getClassCoverageLineClass(status) {
   return status === "Covered"
-    ? "class-coverage-status class-coverage-status-covered"
-    : "class-coverage-status class-coverage-status-uncovered";
-}
-
-function getClassCoverageRowClass(status) {
-  return status === "Covered"
-    ? "class-coverage-row-covered"
-    : "class-coverage-row-uncovered";
+    ? "class-coverage-line-covered"
+    : "class-coverage-line-uncovered";
 }
 
 async function executeSelectedTests() {
