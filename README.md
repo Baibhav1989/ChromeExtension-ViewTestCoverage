@@ -48,3 +48,6 @@ and combines the results in a table.
 - The token is stored in Chrome local extension storage for convenience.
 - Session import reads Salesforce `sid` from the active tab cookie.
 - If you run into auth issues, refresh your OAuth token and try again.
+
+
+app link: https://chromewebstore.google.com/detail/apex-class-coverage-viewe/hdakkklbpcmnnghmipiimphgcfccabng
