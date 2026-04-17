@@ -21,6 +21,19 @@ This extension connects to Salesforce Tooling API and shows:
 3. Click **Load unpacked**
 4. Select this folder: `chromeextension`
 
+## Create publish ZIP
+
+Run:
+
+`./scripts/package-extension.sh`
+
+What it does:
+
+- Verifies `manifest.json` uses PNG icon paths (not SVG)
+- Ensures icon dimensions are exactly 16x16, 48x48, and 128x128
+- Includes only required extension files (so `.DS_Store` is excluded from upload)
+- Creates a clean upload ZIP in `dist/` named with the manifest version
+
 ## How to use
 
 1. Click the extension icon
