@@ -210,7 +210,7 @@ button.secondary:hover:not(:disabled) {
 .table-wrapper {
   max-height: clamp(320px, 55vh, 70vh);
   overflow: auto;
-  border: none;
+  border: 1px solid #d1d5db;
   border-radius: 12px;
   background: #ffffff;
   box-shadow: 0 2px 8px rgba(15, 23, 42, 0.08);
@@ -222,7 +222,8 @@ button.secondary:hover:not(:disabled) {
 
 table {
   width: 100%;
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
 }
 
 thead {
@@ -236,7 +237,7 @@ th {
   font-size: 12px;
   text-align: left;
   padding: 12px 14px;
-  border-bottom: 2px solid #d1d5db;
+  border-bottom: 1px solid #cbd5e1;
   font-weight: 700;
   color: #374151;
   text-transform: uppercase;
@@ -247,14 +248,24 @@ td {
   font-size: 12px;
   text-align: left;
   padding: 12px 14px;
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid #dbe3ee;
+  background: #ffffff;
+}
+
+thead th + th,
+tbody td + td {
+  border-left: 1px solid #eef2f7;
+}
+
+tbody tr:nth-child(even) td {
+  background: #fcfdff;
 }
 
 tbody tr {
   transition: all 0.2s ease;
 }
 
-tbody tr:hover {
+tbody tr:hover td {
   background: #f0f9ff;
 }
 
@@ -262,9 +273,13 @@ tbody tr:hover {
   cursor: pointer;
 }
 
-.clickable-row.selected-row {
+.clickable-row.selected-row td {
   background: linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%);
   font-weight: 500;
+}
+
+tbody tr:last-child td {
+  border-bottom: none;
 }
 
 .coverage-good {
