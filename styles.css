@@ -244,6 +244,48 @@ th {
   letter-spacing: 0.3px;
 }
 
+.sort-header {
+  all: unset;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  font-size: inherit;
+  font-weight: inherit;
+  color: inherit;
+  text-transform: inherit;
+  letter-spacing: inherit;
+}
+
+.sort-header:hover {
+  color: #0f172a;
+}
+
+.sort-header:focus-visible {
+  outline: 2px solid #0b5cab;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.sort-indicator {
+  display: inline-block;
+  width: 10px;
+  color: #94a3b8;
+  font-size: 10px;
+  line-height: 1;
+  text-align: center;
+}
+
+.sort-header.sort-asc .sort-indicator::before {
+  content: "▲";
+  color: #0b5cab;
+}
+
+.sort-header.sort-desc .sort-indicator::before {
+  content: "▼";
+  color: #0b5cab;
+}
+
 td {
   font-size: 12px;
   text-align: left;

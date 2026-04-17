@@ -44,6 +44,7 @@ const classCoverageSummaryEl = document.getElementById("class-coverage-summary")
 const classCoverageBodyEl = document.getElementById("class-coverage-body");
 const classCoverageCloseBtn = document.getElementById("class-coverage-close");
 const classCoverageDoneBtn = document.getElementById("class-coverage-done");
+const sortHeaderButtons = Array.from(document.querySelectorAll(".sort-header"));
 
 const TERMINAL_TEST_QUEUE_STATUSES = new Set(["Completed", "Failed", "Aborted"]);
 const POLLING_TEST_QUEUE_STATUSES = new Set(["Queued", "Preparing", "Holding", "Processing"]);
@@ -56,6 +57,10 @@ let currentConfig = null;
 let isTestExecutionInProgress = false;
 const methodCoverageCache = new Map();
 const classCoverageCache = new Map();
+const sortState = {
+  key: null,
+  direction: "asc"
+};
 
 const STORAGE_KEY = "apexCoverageConfig";
 
@@ -67,6 +72,7 @@ async function initialize() {
   excludePackagesEl.disabled = false; // Enable the exclude packages button by default
   await restoreConfig();
   fillSessionFromActiveTab(); // Auto-load session on startup
+  initializeSortingControls();
 
   // Form submission and coverage loading
   form.addEventListener("submit", async (event) => {
@@ -95,14 +101,14 @@ async function initialize() {
   excludePackagesEl.addEventListener("click", (event) => {
     event.preventDefault();
     toggleExcludePackages();
-    visibleRows = filterRows(allRows, searchEl.value);
+    visibleRows = sortRows(filterRows(allRows, searchEl.value));
     renderRows(visibleRows);
     renderSummary(getSummaryRows(allRows));
   });
 
   // Real-time search filtering
   searchEl.addEventListener("input", () => {
-    visibleRows = filterRows(allRows, searchEl.value);
+    visibleRows = sortRows(filterRows(allRows, searchEl.value));
     renderRows(visibleRows);
     renderSummary(getSummaryRows(allRows));
   });
@@ -178,6 +184,117 @@ function toggleExcludePackages() {
   excludePackagesEl.setAttribute("aria-pressed", !isPressed);
 }
 
+function initializeSortingControls() {
+  for (const button of sortHeaderButtons) {
+    button.addEventListener("click", () => {
+      const sortKey = button.getAttribute("data-sort-key");
+      if (!sortKey) {
+        return;
+      }
+      toggleSort(sortKey);
+    });
+  }
+
+  updateSortHeaderIndicators();
+}
+
+function toggleSort(sortKey) {
+  if (sortState.key === sortKey) {
+    sortState.direction = sortState.direction === "asc" ? "desc" : "asc";
+  } else {
+    sortState.key = sortKey;
+    sortState.direction = "asc";
+  }
+
+  visibleRows = sortRows(visibleRows);
+  renderRows(visibleRows);
+  updateSortHeaderIndicators();
+}
+
+function sortRows(rows) {
+  const sorted = [...rows];
+  if (!sortState.key) {
+    return sorted;
+  }
+
+  sorted.sort((left, right) => {
+    const direction = sortState.direction === "asc" ? 1 : -1;
+    const leftValue = getSortValue(left, sortState.key);
+    const rightValue = getSortValue(right, sortState.key);
+
+    const leftMissing = leftValue === null || leftValue === undefined;
+    const rightMissing = rightValue === null || rightValue === undefined;
+    if (leftMissing && rightMissing) {
+      return String(left.name || "").localeCompare(String(right.name || ""));
+    }
+    if (leftMissing) {
+      return 1;
+    }
+    if (rightMissing) {
+      return -1;
+    }
+
+    if (typeof leftValue === "number" && typeof rightValue === "number") {
+      const delta = (leftValue - rightValue) * direction;
+      if (delta !== 0) {
+        return delta;
+      }
+      return String(left.name || "").localeCompare(String(right.name || ""));
+    }
+
+    const compare = String(leftValue).localeCompare(
+      String(rightValue),
+      undefined,
+      { sensitivity: "base" }
+    );
+    if (compare !== 0) {
+      return compare * direction;
+    }
+    return String(left.name || "").localeCompare(String(right.name || ""));
+  });
+
+  return sorted;
+}
+
+function getSortValue(row, key) {
+  if (!row) {
+    return null;
+  }
+  switch (key) {
+    case "name":
+      return row.name || "";
+    case "namespace":
+      return row.namespace || "";
+    case "covered":
+      return Number(row.covered || 0);
+    case "uncovered":
+      return Number(row.uncovered || 0);
+    case "percent":
+      return typeof row.percent === "number" ? row.percent : null;
+    default:
+      return row.name || "";
+  }
+}
+
+function updateSortHeaderIndicators() {
+  for (const button of sortHeaderButtons) {
+    const sortKey = button.getAttribute("data-sort-key");
+    const th = button.closest("th");
+    button.classList.remove("sort-asc", "sort-desc");
+    if (th) {
+      th.setAttribute("aria-sort", "none");
+    }
+
+    if (sortKey && sortKey === sortState.key) {
+      const activeClass = sortState.direction === "asc" ? "sort-asc" : "sort-desc";
+      button.classList.add(activeClass);
+      if (th) {
+        th.setAttribute("aria-sort", sortState.direction === "asc" ? "ascending" : "descending");
+      }
+    }
+  }
+}
+
 async function restoreConfig() {
   const stored = await chrome.storage.local.get(STORAGE_KEY);
   const config = stored[STORAGE_KEY];
@@ -243,7 +360,7 @@ async function loadCoverage() {
     testClasses = testClassesList;
 
     allRows = buildCoverageRows(regularClasses, coverage);
-    visibleRows = filterRows(allRows, searchEl.value);
+    visibleRows = sortRows(filterRows(allRows, searchEl.value));
     renderRows(visibleRows);
     renderSummary(getSummaryRows(allRows));
     toggleResults(true);
