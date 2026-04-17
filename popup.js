@@ -938,16 +938,26 @@ async function executeSelectedTests() {
     name: cb.getAttribute("data-name")
   }));
 
-  setStatus("Executing test classes... This may take a few moments.", "");
+  setStatus("Queueing test classes in Salesforce Test Execution...", "");
   closeTestModal();
 
   try {
-    // Execute tests via Salesforce API
+    // Queue tests via Salesforce Tooling API (async so runs appear in org Test Execution)
+    const queuedRunIds = [];
     for (const testClass of selectedTestClassIds) {
-      await runTestClass(currentConfig, testClass.id, testClass.name);
+      const result = await runTestClass(currentConfig, testClass.id, testClass.name);
+      if (result && result.runId) {
+        queuedRunIds.push(result.runId);
+      }
     }
 
-    setStatus(`Successfully executed ${selectedTestClassIds.length} test class(es).`, "success");
+    const queuedText = queuedRunIds.length > 0
+      ? ` Run IDs: ${queuedRunIds.join(", ")}.`
+      : "";
+    setStatus(
+      `Queued ${selectedTestClassIds.length} test class(es) in Salesforce.${queuedText}`,
+      "success"
+    );
   } catch (error) {
     setStatus(getErrorMessage(error), "error");
   }
@@ -967,30 +977,14 @@ async function runTestClass(config, classId, className) {
 
     const testClassName = classQuery[0].Name;
 
-    const payload = await executeTestsSynchronous(config, classId, testClassName);
-
-    // Check if tests passed
-    if (payload.numFailures && payload.numFailures > 0) {
-      console.warn(`Test class "${className}" had ${payload.numFailures} failure(s)`);
-      return {
-        success: false,
-        failures: payload.numFailures,
-        message: payload.totalTime ? `Failed in ${payload.totalTime}ms` : "Test failed"
-      };
-    }
-
-    return {
-      success: true,
-      totalTime: payload.totalTime || 0,
-      message: `Passed in ${payload.totalTime}ms`
-    };
+    return await enqueueTestsAsynchronous(config, classId, testClassName);
   } catch (error) {
     throw new Error(`Failed to run test class "${className}": ${error.message}`);
   }
 }
 
-async function executeTestsSynchronous(config, classId, testClassName) {
-  const baseUrl = `${config.instanceUrl}/services/data/v${config.apiVersion}/tooling/runTestsSynchronous`;
+async function enqueueTestsAsynchronous(config, classId, testClassName) {
+  const baseUrl = `${config.instanceUrl}/services/data/v${config.apiVersion}/tooling/runTestsAsynchronous`;
   const headers = {
     Authorization: `Bearer ${config.accessToken}`,
     "Content-Type": "application/json",
@@ -1002,14 +996,21 @@ async function executeTestsSynchronous(config, classId, testClassName) {
       method: "POST",
       url: baseUrl,
       body: {
-        tests: [{ className: testClassName }]
+        classids: classId
       }
     },
     {
       method: "POST",
       url: baseUrl,
       body: {
-        tests: [{ classId }]
+        classNames: testClassName
+      }
+    },
+    {
+      method: "POST",
+      url: baseUrl,
+      body: {
+        tests: [{ className: testClassName }]
       }
     },
     {
@@ -1029,7 +1030,11 @@ async function executeTestsSynchronous(config, classId, testClassName) {
     const payload = await parseJsonResponse(response);
 
     if (response.ok) {
-      return payload;
+      const runId = extractAsyncTestRunId(payload);
+      return {
+        runId,
+        payload
+      };
     }
 
     const message = extractSalesforceError(payload, response.status);
@@ -1050,4 +1055,28 @@ async function parseJsonResponse(response) {
   } catch (_error) {
     return { message: text };
   }
+}
+
+function extractAsyncTestRunId(payload) {
+  if (!payload) {
+    return null;
+  }
+
+  if (typeof payload === "string") {
+    return payload;
+  }
+
+  if (payload.id) {
+    return payload.id;
+  }
+
+  if (payload.testRunId) {
+    return payload.testRunId;
+  }
+
+  if (payload.queueItemId) {
+    return payload.queueItemId;
+  }
+
+  return null;
 }
