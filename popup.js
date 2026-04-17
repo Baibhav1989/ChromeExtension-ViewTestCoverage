@@ -967,31 +967,7 @@ async function runTestClass(config, classId, className) {
 
     const testClassName = classQuery[0].Name;
 
-    // Use Salesforce Tooling API to run tests with correct format
-    const requestBody = {
-      testLevel: "RunLocalTests",
-      tests: [
-        {
-          className: testClassName
-        }
-      ]
-    };
-
-    const response = await fetch(`${config.instanceUrl}/services/data/v${config.apiVersion}/tooling/runTestSynchronous`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${config.accessToken}`,
-        "Content-Type": "application/json",
-        Accept: "application/json"
-      },
-      body: JSON.stringify(requestBody)
-    });
-
-    const payload = await response.json();
-
-    if (!response.ok) {
-      throw new Error(`${extractSalesforceError(payload, response.status)}`);
-    }
+    const payload = await executeTestsSynchronous(config, classId, testClassName);
 
     // Check if tests passed
     if (payload.numFailures && payload.numFailures > 0) {
@@ -1010,5 +986,68 @@ async function runTestClass(config, classId, className) {
     };
   } catch (error) {
     throw new Error(`Failed to run test class "${className}": ${error.message}`);
+  }
+}
+
+async function executeTestsSynchronous(config, classId, testClassName) {
+  const baseUrl = `${config.instanceUrl}/services/data/v${config.apiVersion}/tooling/runTestsSynchronous`;
+  const headers = {
+    Authorization: `Bearer ${config.accessToken}`,
+    "Content-Type": "application/json",
+    Accept: "application/json"
+  };
+
+  const attempts = [
+    {
+      method: "POST",
+      url: baseUrl,
+      body: {
+        tests: [{ className: testClassName }]
+      }
+    },
+    {
+      method: "POST",
+      url: baseUrl,
+      body: {
+        tests: [{ classId }]
+      }
+    },
+    {
+      method: "GET",
+      url: `${baseUrl}/?classids=${encodeURIComponent(classId)}`
+    }
+  ];
+
+  const errors = [];
+
+  for (const attempt of attempts) {
+    const response = await fetch(attempt.url, {
+      method: attempt.method,
+      headers,
+      body: attempt.body ? JSON.stringify(attempt.body) : undefined
+    });
+    const payload = await parseJsonResponse(response);
+
+    if (response.ok) {
+      return payload;
+    }
+
+    const message = extractSalesforceError(payload, response.status);
+    errors.push(message);
+  }
+
+  throw new Error(errors.filter(Boolean).join(" | "));
+}
+
+async function parseJsonResponse(response) {
+  const text = await response.text();
+  if (!text) {
+    return {};
+  }
+
+  try {
+    return JSON.parse(text);
+  } catch (_error) {
+    return { message: text };
   }
 }
