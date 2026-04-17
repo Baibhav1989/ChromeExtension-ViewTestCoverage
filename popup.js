@@ -345,13 +345,16 @@ function renderRows(rows) {
 
     const percentText = row.percent === null ? "-" : `${row.percent.toFixed(2)}%`;
     const percentClass = getCoverageClass(row.percent);
+    const coverageCellContent = percentClass
+      ? `<span class="${percentClass}">${percentText}</span>`
+      : percentText;
 
     tr.innerHTML = `
       <td>${escapeHtml(row.name)}</td>
       <td>${escapeHtml(row.namespace)}</td>
       <td>${row.covered}</td>
       <td>${row.uncovered}</td>
-      <td class="${percentClass}">${percentText}</td>
+      <td>${coverageCellContent}</td>
     `;
 
     tr.addEventListener("click", async () => {
