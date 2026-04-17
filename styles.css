@@ -257,8 +257,26 @@ th {
   letter-spacing: inherit;
 }
 
+button.sort-header,
+button.sort-header:focus-visible {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  transform: none;
+  padding: 0;
+}
+
 .sort-header:hover {
-  color: #0f172a;
+  color: #0b5cab;
+}
+
+button.sort-header:hover:not(:disabled),
+button.sort-header:active:not(:disabled) {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  transform: none;
+  color: #0b5cab;
 }
 
 .sort-header:focus-visible {
