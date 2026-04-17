@@ -278,6 +278,12 @@ tbody tr:hover td {
   font-weight: 500;
 }
 
+.row-view-btn {
+  padding: 6px 12px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
 tbody tr:last-child td {
   border-bottom: none;
 }
@@ -497,6 +503,82 @@ tbody tr:last-child td {
   flex-direction: column;
   max-height: 80vh;
   animation: modalSlideIn 0.3s ease-out;
+}
+
+.class-coverage-modal-content {
+  width: 96%;
+  max-width: 1120px;
+  max-height: 88vh;
+}
+
+.class-coverage-modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.class-coverage-table-wrapper {
+  max-height: calc(88vh - 220px);
+}
+
+.class-coverage-line-number {
+  width: 90px;
+  font-weight: 700;
+}
+
+.class-coverage-code-cell {
+  font-family: Menlo, Monaco, Consolas, "Courier New", monospace;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.class-coverage-code-cell code {
+  font-family: inherit;
+  font-size: 12px;
+}
+
+.class-coverage-status {
+  display: inline-block;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-weight: 700;
+  font-size: 11px;
+}
+
+.class-coverage-status-covered {
+  color: #047857;
+  background: #d1fae5;
+}
+
+.class-coverage-status-uncovered {
+  color: #b91c1c;
+  background: #fee2e2;
+}
+
+.class-coverage-table-wrapper tbody tr.class-coverage-row-covered td {
+  background: #ecfdf3;
+}
+
+.class-coverage-table-wrapper tbody tr.class-coverage-row-covered .class-coverage-code-cell,
+.class-coverage-table-wrapper tbody tr.class-coverage-row-covered .class-coverage-line-number {
+  color: #047857;
+}
+
+.class-coverage-table-wrapper tbody tr.class-coverage-row-uncovered td {
+  background: #fff1f2;
+}
+
+.class-coverage-table-wrapper tbody tr.class-coverage-row-uncovered .class-coverage-code-cell,
+.class-coverage-table-wrapper tbody tr.class-coverage-row-uncovered .class-coverage-line-number {
+  color: #b91c1c;
+}
+
+.class-coverage-table-wrapper tbody tr.class-coverage-row-covered:hover td {
+  background: #dcfce7;
+}
+
+.class-coverage-table-wrapper tbody tr.class-coverage-row-uncovered:hover td {
+  background: #ffe4e6;
 }
 
 @keyframes modalSlideIn {

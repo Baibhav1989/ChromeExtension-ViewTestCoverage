@@ -38,6 +38,12 @@ const executeBtn = document.getElementById("execute-btn");
 const testExecutionResultsSectionEl = document.getElementById("test-execution-results");
 const testExecutionHelpEl = document.getElementById("test-execution-help");
 const testExecutionBodyEl = document.getElementById("test-execution-body");
+const classCoverageModalEl = document.getElementById("class-coverage-modal");
+const classCoverageTitleEl = document.getElementById("class-coverage-title");
+const classCoverageSummaryEl = document.getElementById("class-coverage-summary");
+const classCoverageBodyEl = document.getElementById("class-coverage-body");
+const classCoverageCloseBtn = document.getElementById("class-coverage-close");
+const classCoverageDoneBtn = document.getElementById("class-coverage-done");
 
 const TERMINAL_TEST_QUEUE_STATUSES = new Set(["Completed", "Failed", "Aborted"]);
 const POLLING_TEST_QUEUE_STATUSES = new Set(["Queued", "Preparing", "Holding", "Processing"]);
@@ -49,6 +55,7 @@ let selectedClassId = null;
 let currentConfig = null;
 let isTestExecutionInProgress = false;
 const methodCoverageCache = new Map();
+const classCoverageCache = new Map();
 
 const STORAGE_KEY = "apexCoverageConfig";
 
@@ -114,6 +121,14 @@ async function initialize() {
     closeTestModal();
   });
 
+  classCoverageCloseBtn.addEventListener("click", () => {
+    closeClassCoverageModal();
+  });
+
+  classCoverageDoneBtn.addEventListener("click", () => {
+    closeClassCoverageModal();
+  });
+
   // Test class selection
   selectAllBtn.addEventListener("click", () => {
     document.querySelectorAll(".test-class-checkbox").forEach(checkbox => {
@@ -135,6 +150,12 @@ async function initialize() {
   testModalEl.addEventListener("click", (event) => {
     if (event.target === testModalEl) {
       closeTestModal();
+    }
+  });
+
+  classCoverageModalEl.addEventListener("click", (event) => {
+    if (event.target === classCoverageModalEl) {
+      closeClassCoverageModal();
     }
   });
 
@@ -204,6 +225,7 @@ async function loadCoverage() {
     currentConfig = config;
     await persistConfig(config);
     methodCoverageCache.clear();
+    classCoverageCache.clear();
     selectedClassId = null;
 
     const classes = await queryAll(
@@ -331,7 +353,7 @@ function renderRows(rows) {
 
   if (rows.length === 0) {
     const empty = document.createElement("tr");
-    empty.innerHTML = `<td colspan="5">No classes found.</td>`;
+    empty.innerHTML = `<td colspan="6">No classes found.</td>`;
     coverageBodyEl.appendChild(empty);
     return;
   }
@@ -355,7 +377,14 @@ function renderRows(rows) {
       <td>${row.covered}</td>
       <td>${row.uncovered}</td>
       <td>${coverageCellContent}</td>
+      <td><button type="button" class="secondary row-view-btn">View</button></td>
     `;
+
+    const viewBtn = tr.querySelector(".row-view-btn");
+    viewBtn.addEventListener("click", async (event) => {
+      event.stopPropagation();
+      await showClassCoverageModal(row.id, row.name);
+    });
 
     tr.addEventListener("click", async () => {
       await handleClassSelection(row.id, row.name);
@@ -433,6 +462,8 @@ function clearResults() {
   summaryEl.innerHTML = "";
   methodDetailsBodyEl.innerHTML = "";
   methodCoverageCache.clear();
+  classCoverageCache.clear();
+  closeClassCoverageModal();
   toggleResults(false);
 }
 
@@ -1039,6 +1070,143 @@ function showTestClassesModal() {
 
 function closeTestModal() {
   testModalEl.classList.add("hidden");
+}
+
+async function showClassCoverageModal(classId, className) {
+  if (!currentConfig) {
+    setStatus("Load coverage first before viewing class coverage lines.", "error");
+    return;
+  }
+
+  classCoverageModalEl.classList.remove("hidden");
+  classCoverageTitleEl.textContent = `Class Coverage - ${className}`;
+  classCoverageSummaryEl.textContent = "Loading covered and uncovered lines...";
+  classCoverageBodyEl.innerHTML = "<tr><td colspan=\"3\">Loading...</td></tr>";
+
+  try {
+    const details = await getClassCoverageDetails(classId);
+    renderClassCoverageModal(details, className);
+  } catch (error) {
+    classCoverageSummaryEl.textContent = "Could not load class coverage details.";
+    classCoverageBodyEl.innerHTML =
+      `<tr><td colspan="3">${escapeHtml(getErrorMessage(error))}</td></tr>`;
+  }
+}
+
+function closeClassCoverageModal() {
+  classCoverageModalEl.classList.add("hidden");
+}
+
+async function getClassCoverageDetails(classId) {
+  if (classCoverageCache.has(classId)) {
+    return classCoverageCache.get(classId);
+  }
+
+  const classRecords = await queryAll(
+    currentConfig,
+    `SELECT Id, Name, Body FROM ApexClass WHERE Id = '${escapeSoqlLiteral(classId)}' LIMIT 1`
+  );
+
+  const classRecord = classRecords[0];
+  if (!classRecord) {
+    throw new Error("Unable to locate selected Apex class.");
+  }
+
+  const coverageRows = await queryAll(
+    currentConfig,
+    "SELECT Coverage FROM ApexCodeCoverage " +
+      `WHERE ApexClassOrTriggerId = '${escapeSoqlLiteral(classId)}'`
+  );
+
+  const details = buildClassCoverageLineData(classRecord.Body || "", coverageRows);
+  classCoverageCache.set(classId, details);
+  return details;
+}
+
+function buildClassCoverageLineData(classBody, coverageRows) {
+  const sourceLines = String(classBody || "").split(/\r?\n/);
+  const coveredLines = new Set();
+  const uncoveredLines = new Set();
+
+  for (const row of coverageRows) {
+    const coverage = row && row.Coverage ? row.Coverage : {};
+    const rowCoveredLines = Array.isArray(coverage.coveredLines) ? coverage.coveredLines : [];
+    const rowUncoveredLines = Array.isArray(coverage.uncoveredLines) ? coverage.uncoveredLines : [];
+
+    for (const line of rowCoveredLines) {
+      if (Number.isInteger(line) && line > 0) {
+        coveredLines.add(line);
+      }
+    }
+    for (const line of rowUncoveredLines) {
+      if (Number.isInteger(line) && line > 0) {
+        uncoveredLines.add(line);
+      }
+    }
+  }
+
+  for (const line of coveredLines) {
+    uncoveredLines.delete(line);
+  }
+
+  const lineItems = [];
+  for (let lineNumber = 1; lineNumber <= sourceLines.length; lineNumber += 1) {
+    const isCovered = coveredLines.has(lineNumber);
+    const isUncovered = uncoveredLines.has(lineNumber);
+    if (!isCovered && !isUncovered) {
+      continue;
+    }
+
+    lineItems.push({
+      lineNumber,
+      status: isCovered ? "Covered" : "Uncovered",
+      code: sourceLines[lineNumber - 1] || ""
+    });
+  }
+
+  return {
+    coveredCount: coveredLines.size,
+    uncoveredCount: uncoveredLines.size,
+    lineItems
+  };
+}
+
+function renderClassCoverageModal(details, className) {
+  classCoverageSummaryEl.textContent =
+    `${className} - Covered lines: ${details.coveredCount}, ` +
+    `Uncovered lines: ${details.uncoveredCount}`;
+  classCoverageBodyEl.innerHTML = "";
+
+  if (!details.lineItems || details.lineItems.length === 0) {
+    classCoverageBodyEl.innerHTML =
+      "<tr><td colspan=\"3\">No line-level coverage data returned for this class.</td></tr>";
+    return;
+  }
+
+  for (const item of details.lineItems) {
+    const tr = document.createElement("tr");
+    tr.className = getClassCoverageRowClass(item.status);
+    tr.innerHTML = `
+      <td class="class-coverage-line-number">${item.lineNumber}</td>
+      <td>
+        <span class="${getClassCoverageStatusClass(item.status)}">${escapeHtml(item.status)}</span>
+      </td>
+      <td class="class-coverage-code-cell"><code>${escapeHtml(item.code)}</code></td>
+    `;
+    classCoverageBodyEl.appendChild(tr);
+  }
+}
+
+function getClassCoverageStatusClass(status) {
+  return status === "Covered"
+    ? "class-coverage-status class-coverage-status-covered"
+    : "class-coverage-status class-coverage-status-uncovered";
+}
+
+function getClassCoverageRowClass(status) {
+  return status === "Covered"
+    ? "class-coverage-row-covered"
+    : "class-coverage-row-uncovered";
 }
 
 async function executeSelectedTests() {

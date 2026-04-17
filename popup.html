@@ -88,6 +88,7 @@
               <th>Covered</th>
               <th>Uncovered</th>
               <th>Coverage %</th>
+              <th>Action</th>
             </tr>
           </thead>
           <tbody id="coverage-body"></tbody>
@@ -148,6 +149,34 @@
           <button id="deselect-all-btn" type="button" class="secondary">Deselect All</button>
           <button id="execute-btn" type="button">Execute Selected</button>
           <button id="modal-cancel" type="button" class="secondary">Cancel</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Class Coverage Modal -->
+    <div id="class-coverage-modal" class="modal hidden">
+      <div class="modal-content class-coverage-modal-content">
+        <div class="modal-header">
+          <h2 id="class-coverage-title">Class Coverage</h2>
+          <button id="class-coverage-close" type="button" class="modal-close">&times;</button>
+        </div>
+        <div class="modal-body class-coverage-modal-body">
+          <p id="class-coverage-summary" class="muted">Loading class coverage details...</p>
+          <div class="table-wrapper class-coverage-table-wrapper">
+            <table>
+              <thead>
+                <tr>
+                  <th>Line</th>
+                  <th>Status</th>
+                  <th>Code</th>
+                </tr>
+              </thead>
+              <tbody id="class-coverage-body"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button id="class-coverage-done" type="button" class="secondary">Close</button>
         </div>
       </div>
     </div>
