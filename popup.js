@@ -34,10 +34,11 @@ const STORAGE_KEY = "apexCoverageConfig";
 
 initialize();
 
-function initialize() {
+async function initialize() {
   // Default: hide managed-package classes unless user changes it.
   excludePackagesEl.setAttribute("aria-pressed", "true");
-  restoreConfig();
+  excludePackagesEl.disabled = false; // Enable the exclude packages button by default
+  await restoreConfig();
   fillSessionFromActiveTab(); // Auto-load session on startup
 
   form.addEventListener("submit", async (event) => {
