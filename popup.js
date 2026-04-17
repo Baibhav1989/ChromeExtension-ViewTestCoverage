@@ -106,6 +106,10 @@ function initialize() {
 
   // Ensure method details section is hidden on initialization
   methodDetailsSectionEl.classList.add("hidden");
+
+  // Disable export and execute buttons on initialization
+  exportButton.disabled = true;
+  executeTestsButton.disabled = true;
 }
 
 function toggleMethodDetailsView() {
@@ -223,6 +227,7 @@ function isTestClass(apexClass) {
 
 function toggleTestButton(show) {
   executeTestsButton.classList.toggle("hidden", !show);
+  executeTestsButton.disabled = !show;
 }
 
 async function queryAll(config, soql) {
@@ -369,9 +374,14 @@ function toggleResults(show) {
   searchEl.classList.toggle("hidden", !show);
   searchLabelEl.classList.toggle("hidden", !show);
   exportButton.classList.toggle("hidden", !show);
-  // Hide execute tests button when clearing results; will be shown by toggleTestButton if test classes exist
+  // Enable export button when showing results, disable when hiding
+  exportButton.disabled = !show;
+  // Hide and disable execute tests button when clearing results; will be shown by toggleTestButton if test classes exist
   if (!show) {
     executeTestsButton.classList.add("hidden");
+    executeTestsButton.disabled = true;
+  } else {
+    executeTestsButton.disabled = false;
   }
   methodDetailsSectionEl.classList.toggle("hidden", true);
 }
