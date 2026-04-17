@@ -65,6 +65,11 @@ input:focus {
   box-shadow: 0 0 0 3px rgba(11, 92, 171, 0.1);
 }
 
+#search-label.hidden,
+#search.hidden {
+  display: none !important;
+}
+
 .checkbox-label {
   display: flex;
   align-items: center;
@@ -167,6 +172,10 @@ button.secondary:hover:not(:disabled) {
   box-shadow: 0 2px 8px rgba(15, 23, 42, 0.08);
 }
 
+.summary.hidden {
+  display: none !important;
+}
+
 .summary .metric {
   font-weight: 700;
   color: #0f172a;
@@ -184,6 +193,10 @@ button.secondary:hover:not(:disabled) {
   border-radius: 12px;
   background: #ffffff;
   box-shadow: 0 2px 8px rgba(15, 23, 42, 0.08);
+}
+
+.table-wrapper.hidden {
+  display: none !important;
 }
 
 table {

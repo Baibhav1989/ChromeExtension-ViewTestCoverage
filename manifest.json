@@ -3,9 +3,15 @@
   "name": "Apex Class Coverage Viewer",
   "description": "List Salesforce Apex classes with code coverage.",
   "version": "1.0.0",
+  "icons": {
+    "16": "icon-16x16.svg",
+    "48": "icon-48x48.svg",
+    "128": "icon-128x128.svg"
+  },
   "action": {
     "default_title": "Apex Coverage",
-    "default_popup": "popup.html"
+    "default_popup": "popup.html",
+    "default_icon": "icon-48x48.svg"
   },
   "permissions": [
     "storage",

@@ -369,6 +369,10 @@ function toggleResults(show) {
   searchEl.classList.toggle("hidden", !show);
   searchLabelEl.classList.toggle("hidden", !show);
   exportButton.classList.toggle("hidden", !show);
+  // Hide execute tests button when clearing results; will be shown by toggleTestButton if test classes exist
+  if (!show) {
+    executeTestsButton.classList.add("hidden");
+  }
   methodDetailsSectionEl.classList.toggle("hidden", true);
 }
 
