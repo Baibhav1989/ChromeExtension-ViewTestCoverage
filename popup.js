@@ -444,28 +444,19 @@ async function fillSessionFromActiveTab() {
       throw new Error("Active tab is not a Salesforce domain.");
     }
 
-    let sidCookie = await chrome.cookies.get({
-      url: tabUrl.origin,
-      name: "sid"
-    });
-
-    // If sid not found directly, search for it in all cookies for the domain
-    if (!sidCookie || !sidCookie.value) {
-      const allCookies = await chrome.cookies.getAll({
-        domain: tabUrl.hostname
-      });
-      sidCookie = allCookies.find(cookie => cookie.name === "sid");
-    }
+    const candidateOrigins = buildCandidateInstanceOrigins(tabUrl);
+    const sidCookie = await findSalesforceSessionCookie(tabUrl, candidateOrigins);
 
     if (!sidCookie || !sidCookie.value) {
       throw new Error("No Salesforce session found. Please ensure you are logged into Salesforce and try again.");
     }
 
-    form.instanceUrl.value = tabUrl.origin;
+    const resolvedInstanceUrl = candidateOrigins[0] || tabUrl.origin;
+    form.instanceUrl.value = resolvedInstanceUrl;
     form.accessToken.value = sidCookie.value;
 
     // Auto-detect API version from Salesforce
-    const apiVersion = await detectApiVersion(tabUrl.origin, sidCookie.value);
+    const apiVersion = await detectApiVersion(resolvedInstanceUrl, sidCookie.value);
     form.apiVersion.value = apiVersion;
 
     await persistConfig({
@@ -478,6 +469,67 @@ async function fillSessionFromActiveTab() {
   } catch (error) {
     setStatus(getErrorMessage(error), "error");
   }
+}
+
+function buildCandidateInstanceOrigins(tabUrl) {
+  const origins = [];
+
+  // Lightning pages usually need the sibling my.salesforce.com domain for sid/API.
+  if (tabUrl.hostname.endsWith(".lightning.force.com")) {
+    const mySalesforceHost = tabUrl.hostname.replace(/\.lightning\.force\.com$/i, ".my.salesforce.com");
+    origins.push(`https://${mySalesforceHost}`);
+  }
+
+  origins.push(tabUrl.origin);
+
+  // Deduplicate while preserving priority order.
+  return Array.from(new Set(origins));
+}
+
+async function findSalesforceSessionCookie(tabUrl, candidateOrigins) {
+  for (const origin of candidateOrigins) {
+    const cookie = await chrome.cookies.get({
+      url: origin,
+      name: "sid"
+    });
+    if (cookie && cookie.value) {
+      return cookie;
+    }
+  }
+
+  // Fallback: search across all sid cookies and pick one that best matches the active Salesforce tab.
+  const sidCookies = await chrome.cookies.getAll({ name: "sid" });
+  if (!Array.isArray(sidCookies) || sidCookies.length === 0) {
+    return null;
+  }
+
+  const tabHost = tabUrl.hostname.toLowerCase();
+  const preferredDomainFromLightning = tabHost.endsWith(".lightning.force.com")
+    ? tabHost.replace(/\.lightning\.force\.com$/i, ".my.salesforce.com")
+    : "";
+
+  const scored = sidCookies
+    .filter((cookie) => cookie && cookie.domain && isSalesforceHost(cookie.domain.replace(/^\./, "")))
+    .map((cookie) => {
+      const domain = cookie.domain.replace(/^\./, "").toLowerCase();
+      let score = 0;
+      if (domain === tabHost) {
+        score += 4;
+      }
+      if (preferredDomainFromLightning && domain === preferredDomainFromLightning) {
+        score += 3;
+      }
+      if (tabHost.endsWith(domain)) {
+        score += 2;
+      }
+      if (domain.endsWith(".my.salesforce.com")) {
+        score += 1;
+      }
+      return { cookie, score };
+    })
+    .sort((a, b) => b.score - a.score);
+
+  return scored.length > 0 ? scored[0].cookie : null;
 }
 
 async function detectApiVersion(instanceUrl, accessToken) {
