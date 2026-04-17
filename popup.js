@@ -768,6 +768,7 @@ async function handleClassSelection(classId, className) {
   methodDetailsTitleEl.textContent = `Method Coverage - ${className}`;
   methodDetailsHelpEl.textContent = "Loading method to test mapping...";
   methodDetailsBodyEl.innerHTML = "";
+  focusMethodDetailsSection();
 
   try {
     const details = await getMethodCoverageDetails(classId);
@@ -777,6 +778,16 @@ async function handleClassSelection(classId, className) {
     methodDetailsHelpEl.textContent = "Could not load method mapping for this class.";
     methodDetailsBodyEl.innerHTML = `<tr><td colspan="2">${escapeHtml(getErrorMessage(error))}</td></tr>`;
   }
+}
+
+function focusMethodDetailsSection() {
+  methodDetailsSectionEl.scrollIntoView({
+    behavior: "smooth",
+    block: "start"
+  });
+  methodDetailsSectionEl.focus({
+    preventScroll: true
+  });
 }
 
 async function getMethodCoverageDetails(classId) {
