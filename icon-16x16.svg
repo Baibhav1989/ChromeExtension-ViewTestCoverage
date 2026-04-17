@@ -1,18 +1,37 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16">
-  <!-- Background circle -->
-  <circle cx="8" cy="8" r="8" fill="#1e40af"/>
+  <defs>
+    <linearGradient id="bgGrad16" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1e40af;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#0f3a7d;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="accentGrad16" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#10b981;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#059669;stop-opacity:1" />
+    </linearGradient>
+  </defs>
   
-  <!-- Code brackets -->
-  <path d="M 3.5 5.5 L 4.5 6.5 L 3.5 7.5" stroke="#ffffff" stroke-width="0.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M 12.5 5.5 L 11.5 6.5 L 12.5 7.5" stroke="#ffffff" stroke-width="0.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- Background -->
+  <rect width="16" height="16" fill="transparent"/>
   
-  <!-- Coverage meter -->
-  <circle cx="8" cy="8.5" r="3.5" fill="none" stroke="#e0e7ff" stroke-width="0.6"/>
-  <circle cx="8" cy="8.5" r="3.5" fill="none" stroke="#10b981" stroke-width="0.6" 
-          stroke-dasharray="16.5" stroke-dashoffset="3.7" stroke-linecap="round" 
-          transform="rotate(-90 8 8.5)"/>
-  
-  <!-- Checkmark -->
-  <path d="M 6.5 8.5 L 7.3 9.3 L 9.2 7" stroke="#10b981" stroke-width="0.6" fill="none" 
-        stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- Main artwork -->
+  <g transform="translate(2, 2)">
+    <!-- Background circle -->
+    <circle cx="6" cy="6" r="6" fill="url(#bgGrad16)"/>
+    
+    <!-- Code bracket - left -->
+    <path d="M 2 3 L 4 6 L 2 9" stroke="#ffffff" stroke-width="0.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    
+    <!-- Code bracket - right -->
+    <path d="M 10 3 L 8 6 L 10 9" stroke="#ffffff" stroke-width="0.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    
+    <!-- Progress indicator -->
+    <circle cx="6" cy="6" r="3.5" fill="none" stroke="rgba(255,255,255,0.3)" stroke-width="0.6"/>
+    <circle cx="6" cy="6" r="3.5" fill="none" stroke="url(#accentGrad16)" stroke-width="0.6" 
+            stroke-dasharray="16.49" stroke-dashoffset="3.7" stroke-linecap="round" 
+            transform="rotate(-90 6 6)"/>
+    
+    <!-- Checkmark -->
+    <path d="M 4.5 6 L 5.3 6.8 L 7.2 5" stroke="url(#accentGrad16)" stroke-width="0.6" fill="none" 
+          stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
 </svg>
