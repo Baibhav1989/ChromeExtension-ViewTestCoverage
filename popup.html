@@ -113,29 +113,38 @@
 
       <section id="class-list-section" class="data-section hidden">
         <div class="section-header">
-          <h2>Class List</h2>
-          <button id="class-list-toggle" type="button" class="collapse-toggle" aria-expanded="true">
-            Collapse
-          </button>
+          <div class="section-title-group">
+            <button
+              id="class-list-toggle"
+              type="button"
+              class="collapse-toggle"
+              aria-expanded="true"
+              aria-label="Collapse Apex Classes section"
+            >
+              ▴
+            </button>
+            <h2>Apex Classes</h2>
+          </div>
         </div>
         <div id="class-list-content">
-          <label for="search" class="hidden" id="search-label">Filter Classes</label>
-          <input
-            id="search"
-            class="hidden"
-            type="text"
-            placeholder="Type class name..."
-          />
-
           <div id="table-wrapper" class="table-wrapper hidden">
             <table>
               <thead>
                 <tr>
-                  <th>
-                    <button type="button" class="sort-header" data-sort-key="name">
-                      Class Name
-                      <span class="sort-indicator" aria-hidden="true"></span>
-                    </button>
+                  <th class="class-name-header">
+                    <div class="class-name-header-content">
+                      <button type="button" class="sort-header" data-sort-key="name">
+                        Class Name
+                        <span class="sort-indicator" aria-hidden="true"></span>
+                      </button>
+                      <input
+                        id="search"
+                        class="class-name-search"
+                        type="text"
+                        placeholder="Search..."
+                        aria-label="Search Apex classes by name"
+                      />
+                    </div>
                   </th>
                   <th>
                     <button type="button" class="sort-header" data-sort-key="namespace">
@@ -172,10 +181,18 @@
 
       <section id="method-details" class="method-details hidden" tabindex="-1">
         <div class="section-header">
-          <h2 id="method-details-title">Method Coverage</h2>
-          <button id="method-details-toggle" type="button" class="collapse-toggle" aria-expanded="true">
-            Collapse
-          </button>
+          <div class="section-title-group">
+            <button
+              id="method-details-toggle"
+              type="button"
+              class="collapse-toggle"
+              aria-expanded="true"
+              aria-label="Collapse Method Coverage section"
+            >
+              ▴
+            </button>
+            <h2 id="method-details-title">Method Coverage</h2>
+          </div>
         </div>
         <div id="method-details-content">
           <p id="method-details-help" class="muted">
@@ -197,10 +214,18 @@
 
       <section id="test-execution-results" class="test-execution-results hidden">
         <div class="section-header">
-          <h2>Test Class Execution Result</h2>
-          <button id="test-execution-toggle" type="button" class="collapse-toggle" aria-expanded="true">
-            Collapse
-          </button>
+          <div class="section-title-group">
+            <button
+              id="test-execution-toggle"
+              type="button"
+              class="collapse-toggle"
+              aria-expanded="true"
+              aria-label="Collapse Test Class Execution Result section"
+            >
+              ▴
+            </button>
+            <h2>Test Class Execution Result</h2>
+          </div>
         </div>
         <div id="test-execution-content">
           <p id="test-execution-help" class="muted">

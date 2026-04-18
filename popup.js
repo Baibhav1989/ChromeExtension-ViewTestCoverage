@@ -21,7 +21,6 @@ const summaryEl = document.getElementById("summary");
 const tableWrapperEl = document.getElementById("table-wrapper");
 const coverageBodyEl = document.getElementById("coverage-body");
 const searchEl = document.getElementById("search");
-const searchLabelEl = document.getElementById("search-label");
 const includeMethodDetailsEl = document.getElementById("include-method-details");
 const excludePackagesEl = document.getElementById("exclude-packages");
 const themeSelectEl = document.getElementById("theme-select");
@@ -243,7 +242,12 @@ function setSectionExpanded(sectionKey, expanded) {
   }
   controls.contentEl.classList.toggle("hidden", !expanded);
   controls.toggleEl.setAttribute("aria-expanded", String(expanded));
-  controls.toggleEl.textContent = expanded ? "Collapse" : "Expand";
+  controls.toggleEl.textContent = expanded ? "▴" : "▾";
+  const sectionName = controls.sectionEl.id.replace(/-/g, " ");
+  controls.toggleEl.setAttribute(
+    "aria-label",
+    expanded ? `Collapse ${sectionName} section` : `Expand ${sectionName} section`
+  );
 }
 
 function toggleSection(sectionKey) {
@@ -710,8 +714,7 @@ function clearResults() {
 function toggleResults(show) {
   classListSectionEl.classList.toggle("hidden", !show);
   tableWrapperEl.classList.toggle("hidden", !show);
-  searchEl.classList.toggle("hidden", !show);
-  searchLabelEl.classList.toggle("hidden", !show);
+  searchEl.disabled = !show;
   exportButton.classList.toggle("hidden", !show);
   if (show) {
     setSectionExpanded("classList", true);
