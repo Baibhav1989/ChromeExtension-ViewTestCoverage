@@ -714,10 +714,10 @@ function parseLaunchSourceTabId() {
 function buildCandidateInstanceOrigins(tabUrl) {
   const origins = [];
 
-  // Lightning pages usually need the sibling my.salesforce.com domain for sid/API.
-  if (tabUrl.hostname.endsWith(".lightning.force.com")) {
-    const mySalesforceHost = tabUrl.hostname.replace(/\.lightning\.force\.com$/i, ".my.salesforce.com");
-    origins.push(`https://${mySalesforceHost}`);
+  // Some Salesforce UIs run on setup/lightning domains while sid/API usually use my.salesforce.com.
+  const preferredApiHost = derivePreferredApiHost(tabUrl.hostname);
+  if (preferredApiHost) {
+    origins.push(`https://${preferredApiHost}`);
   }
 
   origins.push(tabUrl.origin);
@@ -744,9 +744,7 @@ async function findSalesforceSessionCookie(tabUrl, candidateOrigins) {
   }
 
   const tabHost = tabUrl.hostname.toLowerCase();
-  const preferredDomainFromLightning = tabHost.endsWith(".lightning.force.com")
-    ? tabHost.replace(/\.lightning\.force\.com$/i, ".my.salesforce.com")
-    : "";
+  const preferredDomainFromTab = derivePreferredApiHost(tabHost);
 
   const scored = sidCookies
     .filter((cookie) => cookie && cookie.domain && isSalesforceHost(cookie.domain.replace(/^\./, "")))
@@ -756,7 +754,7 @@ async function findSalesforceSessionCookie(tabUrl, candidateOrigins) {
       if (domain === tabHost) {
         score += 4;
       }
-      if (preferredDomainFromLightning && domain === preferredDomainFromLightning) {
+      if (preferredDomainFromTab && domain === preferredDomainFromTab) {
         score += 3;
       }
       if (tabHost.endsWith(domain)) {
@@ -802,12 +800,37 @@ async function detectApiVersion(instanceUrl, accessToken) {
 }
 
 function isSalesforceHost(hostname) {
+  const host = String(hostname || "").toLowerCase();
   return (
-    hostname.endsWith(".salesforce.com") ||
-    hostname.endsWith(".my.salesforce.com") ||
-    hostname.endsWith(".sandbox.my.salesforce.com") ||
-    hostname.endsWith(".force.com")
+    host.endsWith(".salesforce.com") ||
+    host.endsWith(".my.salesforce.com") ||
+    host.endsWith(".sandbox.my.salesforce.com") ||
+    host.endsWith(".force.com") ||
+    host === "salesforce-setup.com" ||
+    host.endsWith(".salesforce-setup.com") ||
+    host.endsWith(".my.salesforce-setup.com")
   );
+}
+
+function derivePreferredApiHost(hostname) {
+  const host = String(hostname || "").toLowerCase();
+  if (!host) {
+    return "";
+  }
+
+  if (host.endsWith(".lightning.force.com")) {
+    return host.replace(/\.lightning\.force\.com$/i, ".my.salesforce.com");
+  }
+
+  if (host.endsWith(".my.salesforce-setup.com")) {
+    return host.replace(/\.my\.salesforce-setup\.com$/i, ".my.salesforce.com");
+  }
+
+  if (host.endsWith(".salesforce-setup.com")) {
+    return host.replace(/\.salesforce-setup\.com$/i, ".my.salesforce.com");
+  }
+
+  return "";
 }
 
 async function getPreferredSalesforceTab() {
