@@ -1219,12 +1219,7 @@ async function getClassCoverageDetails(classId) {
     return classCoverageCache.get(classId);
   }
 
-  const classRecords = await queryAll(
-    currentConfig,
-    `SELECT Id, Name, Body FROM ApexClass WHERE Id = '${escapeSoqlLiteral(classId)}' LIMIT 1`
-  );
-
-  const classRecord = classRecords[0];
+  const classRecord = await fetchApexClassSource(classId);
   if (!classRecord) {
     throw new Error("Unable to locate selected Apex class.");
   }
@@ -1238,6 +1233,38 @@ async function getClassCoverageDetails(classId) {
   const details = buildClassCoverageLineData(classRecord.Body || "", coverageRows);
   classCoverageCache.set(classId, details);
   return details;
+}
+
+async function fetchApexClassSource(classId) {
+  const classUrl =
+    `${currentConfig.instanceUrl}/services/data/v${currentConfig.apiVersion}` +
+    `/tooling/sobjects/ApexClass/${encodeURIComponent(classId)}`;
+
+  try {
+    const response = await fetch(classUrl, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${currentConfig.accessToken}`,
+        Accept: "application/json"
+      }
+    });
+    const payload = await parseJsonResponse(response);
+
+    if (!response.ok) {
+      throw new Error(extractSalesforceError(payload, response.status));
+    }
+    if (payload && payload.Body) {
+      return payload;
+    }
+  } catch (_error) {
+    // Fallback to SOQL query below if direct sObject fetch is not available.
+  }
+
+  const classRecords = await queryAll(
+    currentConfig,
+    `SELECT Id, Name, Body FROM ApexClass WHERE Id = '${escapeSoqlLiteral(classId)}' LIMIT 1`
+  );
+  return classRecords[0] || null;
 }
 
 function buildClassCoverageLineData(classBody, coverageRows) {
@@ -1270,13 +1297,10 @@ function buildClassCoverageLineData(classBody, coverageRows) {
   for (let lineNumber = 1; lineNumber <= sourceLines.length; lineNumber += 1) {
     const isCovered = coveredLines.has(lineNumber);
     const isUncovered = uncoveredLines.has(lineNumber);
-    if (!isCovered && !isUncovered) {
-      continue;
-    }
 
     lineItems.push({
       lineNumber,
-      status: isCovered ? "Covered" : "Uncovered",
+      status: isCovered ? "Covered" : isUncovered ? "Uncovered" : "Neutral",
       code: sourceLines[lineNumber - 1] || ""
     });
   }
@@ -1319,9 +1343,13 @@ function renderClassCoverageModal(details, className) {
 }
 
 function getClassCoverageLineClass(status) {
-  return status === "Covered"
-    ? "class-coverage-line-covered"
-    : "class-coverage-line-uncovered";
+  if (status === "Covered") {
+    return "class-coverage-line-covered";
+  }
+  if (status === "Uncovered") {
+    return "class-coverage-line-uncovered";
+  }
+  return "class-coverage-line-neutral";
 }
 
 async function executeSelectedTests() {

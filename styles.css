@@ -634,6 +634,10 @@ tbody tr:last-child td {
   color: #f87171;
 }
 
+.class-coverage-line-neutral {
+  background: #0b0f14;
+}
+
 .class-coverage-message {
   padding: 16px;
   color: #cbd5e1;
