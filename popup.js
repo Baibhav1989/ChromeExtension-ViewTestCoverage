@@ -430,7 +430,8 @@ async function persistConfig(config) {
  * Queries ApexClass and ApexCodeCoverageAggregate objects
  * Separates test classes and renders results with filtering
  */
-async function loadCoverage() {
+async function loadCoverage(options = {}) {
+  const preserveExpandedSections = options.preserveExpandedSections === true;
   const config = {
     instanceUrl: (form.instanceUrl.value || "").trim().replace(/\/+$/, ""),
     accessToken: (form.accessToken.value || "").trim(),
@@ -476,7 +477,11 @@ async function loadCoverage() {
     toggleResults(true);
     toggleTestButton(testClasses.length > 0);
     await handleMethodViewToggle();
-    expandSectionExclusive("classList");
+    if (preserveExpandedSections) {
+      setSectionExpanded("classList", true);
+    } else {
+      expandSectionExclusive("classList");
+    }
     setStatus(`Loaded ${allRows.length} Apex classes (${testClasses.length} test classes).`, "success");
   } catch (error) {
     setStatus(getErrorMessage(error), "error");
@@ -1739,7 +1744,7 @@ async function monitorTestExecution({ config, selectedTestClasses, runIds, execu
         : "Test execution completed successfully. Reloading coverage...";
 
       setStatus(completionText, completionType);
-      await loadCoverage();
+      await loadCoverage({ preserveExpandedSections: true });
 
       // If refresh failed, loadCoverage already set an error message.
       if (statusEl.classList.contains("error")) {

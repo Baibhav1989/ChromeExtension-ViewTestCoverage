@@ -51,6 +51,10 @@
       <!-- Feature 3 -->
       <circle cx="0" cy="145" r="10" fill="#10b981"/>
       <text x="30" y="152" font-size="22" fill="#ffffff" font-family="Arial, sans-serif">CSV Export & Reports</text>
+
+      <!-- Feature 4 -->
+      <circle cx="0" cy="210" r="10" fill="#10b981"/>
+      <text x="30" y="217" font-size="22" fill="#ffffff" font-family="Arial, sans-serif">Live Test Execution Tracking</text>
     </g>
   </g>
   

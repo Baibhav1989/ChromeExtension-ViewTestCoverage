@@ -46,6 +46,11 @@
     <rect x="0" y="100" width="200" height="30" rx="4" fill="rgba(255,255,255,0.1)"/>
     <circle cx="20" cy="115" r="6" fill="url(#promoAccent)"/>
     <text x="35" y="119" font-size="14" font-weight="bold" fill="#ffffff" font-family="Arial, sans-serif">CSV Export</text>
+
+    <!-- Test execution indicator -->
+    <rect x="0" y="150" width="200" height="30" rx="4" fill="rgba(255,255,255,0.1)"/>
+    <circle cx="20" cy="165" r="6" fill="url(#promoAccent)"/>
+    <text x="35" y="169" font-size="14" font-weight="bold" fill="#ffffff" font-family="Arial, sans-serif">Test Execution</text>
   </g>
   
   <!-- Bottom accent bar -->
