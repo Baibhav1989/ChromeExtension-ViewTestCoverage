@@ -7,69 +7,100 @@
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
+    <header class="extension-header">
+      <div class="header-content">
+        <span class="header-item"><span class="header-label">User:</span> <span id="sf-user-name">Not connected</span></span>
+        <span class="header-divider">•</span>
+        <span class="header-item"><span class="header-label">Environment:</span> <span id="sf-env-name">Not connected</span></span>
+      </div>
+    </header>
+
     <main class="container">
       <h1>Apex Coverage</h1>
 
-      <form id="config-form" class="config-form">
-        <input
-          id="instance-url"
-          name="instanceUrl"
-          type="url"
-          placeholder="https://your-domain.my.salesforce.com"
-          readonly
-          style="display: none;"
-        />
+      <div class="top-panels">
+        <form id="config-form" class="config-form">
+          <input
+            id="instance-url"
+            name="instanceUrl"
+            type="url"
+            placeholder="https://your-domain.my.salesforce.com"
+            readonly
+            style="display: none;"
+          />
 
-        <input
-          id="access-token"
-          name="accessToken"
-          type="password"
-          placeholder="00D..."
-          readonly
-          style="display: none;"
-        />
+          <input
+            id="access-token"
+            name="accessToken"
+            type="password"
+            placeholder="00D..."
+            readonly
+            style="display: none;"
+          />
 
-        <input
-          id="api-version"
-          name="apiVersion"
-          type="text"
-          value="60.0"
-          pattern="^[0-9]+\\.[0-9]+$"
-          readonly
-          style="display: none;"
-        />
+          <input
+            id="api-version"
+            name="apiVersion"
+            type="text"
+            value="60.0"
+            pattern="^[0-9]+\\.[0-9]+$"
+            readonly
+            style="display: none;"
+          />
 
-        <div class="toggle-view">
-          <label for="include-method-details">Method-wise view</label>
-          <button id="include-method-details" name="includeMethodDetails" type="button" class="toggle-btn" aria-pressed="false">
-            <span class="toggle-slider"></span>
-          </button>
-        </div>
+          <div class="toggle-view">
+            <label for="include-method-details">Method-wise view</label>
+            <button id="include-method-details" name="includeMethodDetails" type="button" class="toggle-btn" aria-pressed="false">
+              <span class="toggle-slider"></span>
+            </button>
+          </div>
 
-        <div class="toggle-view">
-          <label for="exclude-packages">Exclude package classes</label>
-          <button id="exclude-packages" name="excludePackages" type="button" class="toggle-btn" aria-pressed="true">
-            <span class="toggle-slider"></span>
-          </button>
-        </div>
+          <div class="toggle-view">
+            <label for="exclude-packages">Exclude package classes</label>
+            <button id="exclude-packages" name="excludePackages" type="button" class="toggle-btn" aria-pressed="true">
+              <span class="toggle-slider"></span>
+            </button>
+          </div>
 
-        <div class="actions">
-          <button id="session-button" type="button" class="secondary hidden">
-            Use Logged-in Tab Session
-          </button>
-          <button id="load-button" type="submit">Load Coverage</button>
-          <button id="execute-tests-button" type="button" class="secondary hidden">
-            Execute Test Classes
-          </button>
-          <button id="export-button" type="button" class="secondary hidden">
-            Export CSV
-          </button>
-        </div>
-      </form>
+          <div class="actions">
+            <button id="session-button" type="button" class="secondary hidden">
+              Use Logged-in Tab Session
+            </button>
+            <button id="load-button" type="submit">Load Coverage</button>
+            <button id="execute-tests-button" type="button" class="secondary hidden">
+              Execute Test Classes
+            </button>
+            <button id="export-button" type="button" class="secondary hidden">
+              Export CSV
+            </button>
+          </div>
+        </form>
+
+        <section id="summary" class="summary">
+          <div class="summary-item">
+            <span class="metric">Classes</span>
+            <span class="metric-value">0</span>
+          </div>
+          <div class="summary-item">
+            <span class="metric">Total Lines</span>
+            <span class="metric-value">0</span>
+          </div>
+          <div class="summary-item">
+            <span class="metric">Covered Lines</span>
+            <span class="metric-value">0</span>
+          </div>
+          <div class="summary-item">
+            <span class="metric">Uncovered Lines</span>
+            <span class="metric-value">0</span>
+          </div>
+          <div class="summary-item">
+            <span class="metric">Overall Coverage</span>
+            <span class="metric-value">-</span>
+          </div>
+        </section>
+      </div>
 
       <p id="status" class="status"></p>
-
-      <section id="summary" class="summary hidden"></section>
 
       <label for="search" class="hidden" id="search-label">Filter Classes</label>
       <input
@@ -200,6 +231,18 @@
         <span class="footer-text">Apex Coverage Viewer</span>
         <span class="footer-divider">•</span>
         <span class="footer-text">Developed by <strong>Baibahv Kumar</strong></span>
+        <a
+          class="linkedin-link"
+          href="https://www.linkedin.com/in/baibhav-kumar-1780685b/"
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label="Open Baibhav Kumar LinkedIn profile"
+          title="LinkedIn"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path d="M4.98 3.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5zM3 9h4v12H3zm7 0h3.83v1.64h.05c.53-1 1.84-2.05 3.79-2.05C21.5 8.59 22 11.1 22 14.36V21h-4v-5.89c0-1.41-.03-3.22-1.96-3.22-1.97 0-2.27 1.53-2.27 3.12V21h-4z"></path>
+          </svg>
+        </a>
         <span class="footer-divider">•</span>
         <span class="footer-text">v1.0.0</span>
       </div>

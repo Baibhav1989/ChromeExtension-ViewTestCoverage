@@ -45,6 +45,8 @@ const classCoverageBodyEl = document.getElementById("class-coverage-body");
 const classCoverageCloseBtn = document.getElementById("class-coverage-close");
 const classCoverageDoneBtn = document.getElementById("class-coverage-done");
 const sortHeaderButtons = Array.from(document.querySelectorAll(".sort-header"));
+const sfUserNameEl = document.getElementById("sf-user-name");
+const sfEnvNameEl = document.getElementById("sf-env-name");
 
 const TERMINAL_TEST_QUEUE_STATUSES = new Set(["Completed", "Failed", "Aborted"]);
 const POLLING_TEST_QUEUE_STATUSES = new Set(["Queued", "Preparing", "Holding", "Processing"]);
@@ -535,10 +537,26 @@ function renderSummary(rows) {
   const coverageText = overallPercent === null ? "-" : `${overallPercent.toFixed(2)}%`;
 
   summaryEl.innerHTML = `
-    <span><span class="metric">Classes:</span> ${rows.length}</span>
-    <span><span class="metric">Covered Lines:</span> ${covered}</span>
-    <span><span class="metric">Uncovered Lines:</span> ${uncovered}</span>
-    <span><span class="metric">Overall Coverage:</span> ${coverageText}</span>
+    <div class="summary-item">
+      <span class="metric">Classes</span>
+      <span class="metric-value">${rows.length}</span>
+    </div>
+    <div class="summary-item">
+      <span class="metric">Total Lines</span>
+      <span class="metric-value">${totalLines}</span>
+    </div>
+    <div class="summary-item">
+      <span class="metric">Covered Lines</span>
+      <span class="metric-value">${covered}</span>
+    </div>
+    <div class="summary-item">
+      <span class="metric">Uncovered Lines</span>
+      <span class="metric-value">${uncovered}</span>
+    </div>
+    <div class="summary-item">
+      <span class="metric">Overall Coverage</span>
+      <span class="metric-value">${coverageText}</span>
+    </div>
   `;
 }
 
@@ -581,7 +599,7 @@ function clearResults() {
   visibleRows = [];
   selectedClassId = null;
   coverageBodyEl.innerHTML = "";
-  summaryEl.innerHTML = "";
+  renderSummary([]);
   methodDetailsBodyEl.innerHTML = "";
   methodCoverageCache.clear();
   classCoverageCache.clear();
@@ -591,7 +609,6 @@ function clearResults() {
 
 function toggleResults(show) {
   tableWrapperEl.classList.toggle("hidden", !show);
-  summaryEl.classList.toggle("hidden", !show);
   searchEl.classList.toggle("hidden", !show);
   searchLabelEl.classList.toggle("hidden", !show);
   exportButton.classList.toggle("hidden", !show);
@@ -693,11 +710,44 @@ async function fillSessionFromActiveTab() {
     // Auto-detect API version from Salesforce
     const apiVersion = await detectApiVersion(resolvedInstanceUrl, sidCookie.value);
     form.apiVersion.value = apiVersion;
+    await populateHeaderContext({
+      instanceUrl: resolvedInstanceUrl,
+      accessToken: sidCookie.value,
+      apiVersion
+    });
 
     setStatus("Session imported from Salesforce tab.", "success");
   } catch (error) {
+    setHeaderContext({
+      userName: "Not connected",
+      environmentName: "Not connected"
+    });
     setStatus(getErrorMessage(error), "error");
   }
+}
+
+async function populateHeaderContext(config) {
+  try {
+    const [userName, environmentName] = await Promise.all([
+      fetchCurrentUserName(config),
+      fetchEnvironmentName(config)
+    ]);
+
+    setHeaderContext({
+      userName: userName || "Unknown user",
+      environmentName: environmentName || deriveEnvironmentFromUrl(config.instanceUrl)
+    });
+  } catch (_error) {
+    setHeaderContext({
+      userName: "Unknown user",
+      environmentName: deriveEnvironmentFromUrl(config.instanceUrl)
+    });
+  }
+}
+
+function setHeaderContext({ userName, environmentName }) {
+  sfUserNameEl.textContent = userName || "Unknown user";
+  sfEnvNameEl.textContent = environmentName || "Unknown environment";
 }
 
 function parseLaunchSourceTabId() {
@@ -797,6 +847,74 @@ async function detectApiVersion(instanceUrl, accessToken) {
     console.error("Error detecting API version:", error);
     return "60.0"; // Fallback to default
   }
+}
+
+async function fetchCurrentUserName(config) {
+  try {
+    const response = await fetch(
+      `${config.instanceUrl}/services/data/v${config.apiVersion}/chatter/users/me`,
+      {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${config.accessToken}`,
+          Accept: "application/json"
+        }
+      }
+    );
+    const payload = await parseJsonResponse(response);
+    if (!response.ok) {
+      return "";
+    }
+    return payload && payload.name ? String(payload.name) : "";
+  } catch (_error) {
+    return "";
+  }
+}
+
+async function fetchEnvironmentName(config) {
+  try {
+    const orgInfo = await querySingleRecord(
+      config,
+      "SELECT Name, IsSandbox, InstanceName FROM Organization LIMIT 1"
+    );
+    if (!orgInfo) {
+      return deriveEnvironmentFromUrl(config.instanceUrl);
+    }
+
+    const orgName = orgInfo.Name || "Salesforce Org";
+    const envType = orgInfo.IsSandbox ? "Sandbox" : "Production";
+    const instanceName = orgInfo.InstanceName ? ` - ${orgInfo.InstanceName}` : "";
+    return `${orgName} (${envType})${instanceName}`;
+  } catch (_error) {
+    return deriveEnvironmentFromUrl(config.instanceUrl);
+  }
+}
+
+function deriveEnvironmentFromUrl(instanceUrl) {
+  try {
+    const host = new URL(instanceUrl).hostname;
+    return host;
+  } catch (_error) {
+    return "Unknown environment";
+  }
+}
+
+async function querySingleRecord(config, soql) {
+  const queryPath = `/services/data/v${config.apiVersion}/query?q=${encodeURIComponent(soql)}`;
+  const response = await fetch(`${config.instanceUrl}${queryPath}`, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${config.accessToken}`,
+      Accept: "application/json"
+    }
+  });
+  const payload = await parseJsonResponse(response);
+  if (!response.ok) {
+    return null;
+  }
+
+  const records = Array.isArray(payload.records) ? payload.records : [];
+  return records[0] || null;
 }
 
 function isSalesforceHost(hostname) {
