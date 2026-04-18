@@ -9,9 +9,18 @@
   <body>
     <header class="extension-header">
       <div class="header-content">
-        <span class="header-item"><span class="header-label">User:</span> <span id="sf-user-name">Not connected</span></span>
-        <span class="header-divider">•</span>
-        <span class="header-item"><span class="header-label">Environment:</span> <span id="sf-env-name">Not connected</span></span>
+        <div class="header-left">
+          <span class="header-item"><span class="header-label">User:</span> <span id="sf-user-name">Not connected</span></span>
+          <span class="header-divider">•</span>
+          <span class="header-item"><span class="header-label">Environment:</span> <span id="sf-env-name">Not connected</span></span>
+        </div>
+        <div class="header-right">
+          <label for="theme-select" class="header-label">Theme</label>
+          <select id="theme-select" class="theme-select" aria-label="Select extension theme">
+            <option value="light">Light</option>
+            <option value="dark">Dark</option>
+          </select>
+        </div>
       </div>
     </header>
 

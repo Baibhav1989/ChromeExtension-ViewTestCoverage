@@ -24,6 +24,7 @@ const searchEl = document.getElementById("search");
 const searchLabelEl = document.getElementById("search-label");
 const includeMethodDetailsEl = document.getElementById("include-method-details");
 const excludePackagesEl = document.getElementById("exclude-packages");
+const themeSelectEl = document.getElementById("theme-select");
 const methodDetailsSectionEl = document.getElementById("method-details");
 const methodDetailsTitleEl = document.getElementById("method-details-title");
 const methodDetailsHelpEl = document.getElementById("method-details-help");
@@ -73,6 +74,7 @@ async function initialize() {
   // Default: hide managed-package classes unless user changes it.
   excludePackagesEl.setAttribute("aria-pressed", "true");
   excludePackagesEl.disabled = false; // Enable the exclude packages button by default
+  applyTheme("light");
   await restoreConfig();
   fillSessionFromActiveTab(); // Auto-load session on startup
   initializeSortingControls();
@@ -97,6 +99,7 @@ async function initialize() {
   includeMethodDetailsEl.addEventListener("click", async (event) => {
     event.preventDefault();
     toggleMethodDetailsView();
+    persistUiPreferences();
     await handleMethodViewToggle();
   });
 
@@ -104,9 +107,15 @@ async function initialize() {
   excludePackagesEl.addEventListener("click", (event) => {
     event.preventDefault();
     toggleExcludePackages();
+    persistUiPreferences();
     visibleRows = sortRows(filterRows(allRows, searchEl.value));
     renderRows(visibleRows);
     renderSummary(getSummaryRows(allRows));
+  });
+
+  themeSelectEl.addEventListener("change", () => {
+    applyTheme(themeSelectEl.value === "dark" ? "dark" : "light");
+    persistUiPreferences();
   });
 
   // Real-time search filtering
@@ -185,6 +194,27 @@ function toggleMethodDetailsView() {
 function toggleExcludePackages() {
   const isPressed = excludePackagesEl.getAttribute("aria-pressed") === "true";
   excludePackagesEl.setAttribute("aria-pressed", !isPressed);
+}
+
+function applyTheme(theme) {
+  const isDark = theme === "dark";
+  document.body.classList.toggle("theme-dark", isDark);
+  themeSelectEl.value = isDark ? "dark" : "light";
+}
+
+function getCurrentTheme() {
+  return document.body.classList.contains("theme-dark") ? "dark" : "light";
+}
+
+function persistUiPreferences() {
+  const preferences = {
+    includeMethodDetails: includeMethodDetailsEl.getAttribute("aria-pressed") === "true",
+    excludePackages: excludePackagesEl.getAttribute("aria-pressed") === "true",
+    theme: getCurrentTheme()
+  };
+  persistConfig(preferences).catch(() => {
+    // ignore transient storage failures
+  });
 }
 
 function initializeSortingControls() {
@@ -304,6 +334,7 @@ async function restoreConfig() {
 
   if (!config) {
     excludePackagesEl.setAttribute("aria-pressed", "true");
+    applyTheme("light");
     return;
   }
 
@@ -312,12 +343,14 @@ async function restoreConfig() {
     config.includeMethodDetails ?? false
   );
   excludePackagesEl.setAttribute("aria-pressed", config.excludePackages ?? true);
+  applyTheme(config.theme === "dark" ? "dark" : "light");
 }
 
 async function persistConfig(config) {
   const preferences = {
     includeMethodDetails: Boolean(config.includeMethodDetails),
-    excludePackages: config.excludePackages ?? true
+    excludePackages: config.excludePackages ?? true,
+    theme: config.theme === "dark" ? "dark" : getCurrentTheme()
   };
   await chrome.storage.local.set({ [STORAGE_KEY]: preferences });
 }

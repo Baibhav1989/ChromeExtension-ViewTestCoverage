@@ -620,9 +620,9 @@ tbody tr:last-child td {
   max-height: calc(88vh - 220px);
   overflow-x: auto;
   overflow-y: auto;
-  border: 1px solid #374151;
+  border: 1px solid #cbd5e1;
   border-radius: 10px;
-  background: #0b0f14;
+  background: #f8fafc;
   font-family: Menlo, Monaco, Consolas, "Courier New", monospace;
 }
 
@@ -640,25 +640,25 @@ tbody tr:last-child td {
 }
 
 .class-coverage-line-number {
-  color: #6b7280;
+  color: #64748b;
   font-weight: 700;
   text-align: right;
   user-select: none;
   position: sticky;
   left: 0;
   z-index: 2;
-  background: #0b0f14;
+  background: #f8fafc;
   padding-right: 8px;
 }
 
 .class-coverage-line-text {
   white-space: pre;
   overflow: visible;
-  color: #e5e7eb;
+  color: #111827;
 }
 
 .class-coverage-line-covered {
-  background: #0b0f14;
+  background: #ecfdf3;
 }
 
 .class-coverage-line-covered .class-coverage-line-text {
@@ -666,7 +666,7 @@ tbody tr:last-child td {
 }
 
 .class-coverage-line-uncovered {
-  background: #0b0f14;
+  background: #fff1f2;
 }
 
 .class-coverage-line-uncovered .class-coverage-line-text {
@@ -674,12 +674,12 @@ tbody tr:last-child td {
 }
 
 .class-coverage-line-neutral {
-  background: #0b0f14;
+  background: #f8fafc;
 }
 
 .class-coverage-message {
   padding: 16px;
-  color: #cbd5e1;
+  color: #334155;
   font-size: 13px;
 }
 
@@ -835,9 +835,22 @@ tbody tr:last-child td {
 .header-content {
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: space-between;
   gap: 8px;
   flex-wrap: wrap;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.header-right {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .header-item {
@@ -856,6 +869,22 @@ tbody tr:last-child td {
   opacity: 0.55;
 }
 
+.theme-select {
+  min-width: 95px;
+  height: 28px;
+  padding: 0 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  background: rgba(15, 23, 42, 0.25);
+  color: #f8fafc;
+  font-size: 12px;
+}
+
+.theme-select:focus {
+  outline: 2px solid #93c5fd;
+  outline-offset: 1px;
+}
+
 .extension-footer {
   position: fixed;
   bottom: 0;
@@ -868,6 +897,12 @@ tbody tr:last-child td {
   color: #d1d5db;
   box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.1);
   z-index: 100;
+}
+
+@media (max-width: 760px) {
+  .header-content {
+    justify-content: center;
+  }
 }
 
 .footer-content {
@@ -930,4 +965,194 @@ tbody tr:last-child td {
   width: 14px;
   height: 14px;
   fill: currentColor;
+}
+
+body.theme-dark {
+  background: linear-gradient(135deg, #0b1220 0%, #111827 100%);
+  color: #e5e7eb;
+}
+
+body.theme-dark h1 {
+  background: linear-gradient(135deg, #60a5fa 0%, #93c5fd 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+body.theme-dark .config-form,
+body.theme-dark .summary,
+body.theme-dark .method-details,
+body.theme-dark .test-execution-results,
+body.theme-dark .table-wrapper {
+  background: #111827;
+  border-color: #334155;
+  box-shadow: 0 4px 16px rgba(2, 6, 23, 0.5);
+}
+
+body.theme-dark .summary-item {
+  background: #0f172a;
+  border-color: #334155;
+}
+
+body.theme-dark .summary .metric,
+body.theme-dark label,
+body.theme-dark .toggle-view label,
+body.theme-dark .muted {
+  color: #94a3b8;
+}
+
+body.theme-dark .metric-value,
+body.theme-dark .method-details h2,
+body.theme-dark .test-execution-results h2,
+body.theme-dark th {
+  color: #e2e8f0;
+}
+
+body.theme-dark input {
+  background: #0f172a;
+  border-color: #334155;
+  color: #e2e8f0;
+}
+
+body.theme-dark input::placeholder {
+  color: #64748b;
+}
+
+body.theme-dark input:focus {
+  border-color: #60a5fa;
+  background: #111827;
+  box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.2), inset 0 1px 2px rgba(2, 6, 23, 0.5);
+}
+
+body.theme-dark thead {
+  background: linear-gradient(135deg, #1f2937 0%, #111827 100%);
+}
+
+body.theme-dark th {
+  border-bottom-color: #334155;
+}
+
+body.theme-dark td {
+  color: #d1d5db;
+  background: #111827;
+  border-bottom-color: #1f2937;
+}
+
+body.theme-dark thead th + th,
+body.theme-dark tbody td + td {
+  border-left-color: #1f2937;
+}
+
+body.theme-dark tbody tr:nth-child(even) td {
+  background: #0f172a;
+}
+
+body.theme-dark tbody tr:hover td {
+  background: #1e293b;
+}
+
+body.theme-dark .clickable-row.selected-row td {
+  background: linear-gradient(135deg, #1d4ed8 0%, #1e3a8a 100%);
+  color: #e5e7eb;
+}
+
+body.theme-dark .sort-header {
+  color: #cbd5e1;
+}
+
+body.theme-dark .sort-header:hover,
+body.theme-dark button.sort-header:hover:not(:disabled),
+body.theme-dark button.sort-header:active:not(:disabled) {
+  color: #93c5fd;
+}
+
+body.theme-dark .sort-header.sort-asc .sort-indicator::before,
+body.theme-dark .sort-header.sort-desc .sort-indicator::before {
+  color: #93c5fd;
+}
+
+body.theme-dark .modal-content,
+body.theme-dark .modal-body,
+body.theme-dark .modal-header,
+body.theme-dark .modal-footer {
+  background: #111827;
+  color: #e5e7eb;
+  border-color: #334155;
+}
+
+body.theme-dark .modal-header h2 {
+  color: #f3f4f6;
+}
+
+body.theme-dark .modal-close {
+  color: #cbd5e1;
+}
+
+body.theme-dark .modal-close:hover {
+  color: #ffffff;
+  background: #1f2937;
+}
+
+body.theme-dark .test-classes-list,
+body.theme-dark .test-class-item {
+  background: #0f172a;
+  border-color: #334155;
+}
+
+body.theme-dark .test-class-item label {
+  color: #e5e7eb;
+}
+
+body.theme-dark .class-coverage-editor {
+  background: #0b0f14;
+  border-color: #374151;
+}
+
+body.theme-dark .class-coverage-line-number {
+  color: #6b7280;
+  background: #0b0f14;
+}
+
+body.theme-dark .class-coverage-line-text {
+  color: #e5e7eb;
+}
+
+body.theme-dark .class-coverage-line-covered,
+body.theme-dark .class-coverage-line-uncovered,
+body.theme-dark .class-coverage-line-neutral {
+  background: #0b0f14;
+}
+
+body.theme-dark .class-coverage-line-covered .class-coverage-line-text {
+  color: #22c55e;
+}
+
+body.theme-dark .class-coverage-line-uncovered .class-coverage-line-text {
+  color: #f87171;
+}
+
+body.theme-dark .class-coverage-message {
+  color: #cbd5e1;
+}
+
+body.theme-dark .extension-header {
+  background: linear-gradient(135deg, #0f172a 0%, #020617 100%);
+  border-bottom-color: rgba(148, 163, 184, 0.3);
+  color: #dbeafe;
+}
+
+body.theme-dark .header-label {
+  color: #93c5fd;
+}
+
+body.theme-dark .theme-select {
+  background: rgba(15, 23, 42, 0.9);
+  border-color: #334155;
+  color: #e2e8f0;
+}
+
+body.theme-dark .extension-footer {
+  background: linear-gradient(135deg, #0f172a 0%, #020617 100%);
+  border-top-color: rgba(148, 163, 184, 0.25);
+  color: #cbd5e1;
 }
