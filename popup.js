@@ -1343,6 +1343,14 @@ function buildClassCoverageLineData(classBody, coverageRows) {
     uncoveredLines.delete(line);
   }
 
+  // If Salesforce returns no line-level coverage payload (common for 0% classes),
+  // treat the full class source as uncovered so UI and counts are accurate.
+  if (coveredLines.size === 0 && uncoveredLines.size === 0) {
+    for (let lineNumber = 1; lineNumber <= sourceLines.length; lineNumber += 1) {
+      uncoveredLines.add(lineNumber);
+    }
+  }
+
   const lineItems = [];
   for (let lineNumber = 1; lineNumber <= sourceLines.length; lineNumber += 1) {
     const isCovered = coveredLines.has(lineNumber);
