@@ -63,6 +63,7 @@ const sortState = {
 };
 
 const STORAGE_KEY = "apexCoverageConfig";
+const launchSourceTabId = parseLaunchSourceTabId();
 
 initialize();
 
@@ -304,15 +305,19 @@ async function restoreConfig() {
     return;
   }
 
-  form.instanceUrl.value = config.instanceUrl || "";
-  form.accessToken.value = config.accessToken || "";
-  form.apiVersion.value = config.apiVersion || "60.0";
-  includeMethodDetailsEl.setAttribute("aria-pressed", Boolean(config.includeMethodDetails));
+  includeMethodDetailsEl.setAttribute(
+    "aria-pressed",
+    config.includeMethodDetails ?? false
+  );
   excludePackagesEl.setAttribute("aria-pressed", config.excludePackages ?? true);
 }
 
 async function persistConfig(config) {
-  await chrome.storage.local.set({ [STORAGE_KEY]: config });
+  const preferences = {
+    includeMethodDetails: Boolean(config.includeMethodDetails),
+    excludePackages: config.excludePackages ?? true
+  };
+  await chrome.storage.local.set({ [STORAGE_KEY]: preferences });
 }
 
 /**
@@ -661,7 +666,7 @@ function escapeHtml(value) {
 }
 
 async function fillSessionFromActiveTab() {
-  setStatus("Reading session from a Salesforce tab...", "");
+  setStatus("Reading session from selected Salesforce tab...", "");
 
   try {
     const tab = await getPreferredSalesforceTab();
@@ -689,16 +694,21 @@ async function fillSessionFromActiveTab() {
     const apiVersion = await detectApiVersion(resolvedInstanceUrl, sidCookie.value);
     form.apiVersion.value = apiVersion;
 
-    await persistConfig({
-      instanceUrl: form.instanceUrl.value,
-      accessToken: form.accessToken.value,
-      apiVersion: form.apiVersion.value
-    });
-
     setStatus("Session imported from Salesforce tab.", "success");
   } catch (error) {
     setStatus(getErrorMessage(error), "error");
   }
+}
+
+function parseLaunchSourceTabId() {
+  const params = new URLSearchParams(window.location.search);
+  const rawTabId = params.get("sourceTabId");
+  if (!rawTabId) {
+    return null;
+  }
+
+  const tabId = Number(rawTabId);
+  return Number.isInteger(tabId) ? tabId : null;
 }
 
 function buildCandidateInstanceOrigins(tabUrl) {
@@ -801,6 +811,10 @@ function isSalesforceHost(hostname) {
 }
 
 async function getPreferredSalesforceTab() {
+  if (Number.isInteger(launchSourceTabId)) {
+    return await getLaunchSourceSalesforceTab();
+  }
+
   const tabs = await chrome.tabs.query({
     active: true,
     lastFocusedWindow: true
@@ -816,6 +830,19 @@ async function getPreferredSalesforceTab() {
     .sort((a, b) => (b.lastAccessed || 0) - (a.lastAccessed || 0));
 
   return salesforceTabs[0] || null;
+}
+
+async function getLaunchSourceSalesforceTab() {
+  if (!Number.isInteger(launchSourceTabId)) {
+    return null;
+  }
+
+  try {
+    const tab = await chrome.tabs.get(launchSourceTabId);
+    return isSalesforceTab(tab) ? tab : null;
+  } catch (_error) {
+    return null;
+  }
 }
 
 function isSalesforceTab(tab) {
