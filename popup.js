@@ -432,6 +432,7 @@ async function persistConfig(config) {
  */
 async function loadCoverage(options = {}) {
   const preserveExpandedSections = options.preserveExpandedSections === true;
+  const collapseMethodDetailsSection = options.collapseMethodDetailsSection === true;
   const config = {
     instanceUrl: (form.instanceUrl.value || "").trim().replace(/\/+$/, ""),
     accessToken: (form.accessToken.value || "").trim(),
@@ -481,6 +482,9 @@ async function loadCoverage(options = {}) {
       setSectionExpanded("classList", true);
     } else {
       expandSectionExclusive("classList");
+    }
+    if (collapseMethodDetailsSection && !methodDetailsSectionEl.classList.contains("hidden")) {
+      setSectionExpanded("methodDetails", false);
     }
     setStatus(`Loaded ${allRows.length} Apex classes (${testClasses.length} test classes).`, "success");
   } catch (error) {
@@ -1744,7 +1748,10 @@ async function monitorTestExecution({ config, selectedTestClasses, runIds, execu
         : "Test execution completed successfully. Reloading coverage...";
 
       setStatus(completionText, completionType);
-      await loadCoverage({ preserveExpandedSections: true });
+      await loadCoverage({
+        preserveExpandedSections: true,
+        collapseMethodDetailsSection: true
+      });
 
       // If refresh failed, loadCoverage already set an error message.
       if (statusEl.classList.contains("error")) {
