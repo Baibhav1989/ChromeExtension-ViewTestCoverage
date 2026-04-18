@@ -893,7 +893,8 @@ tbody tr:last-child td {
   opacity: 0.5;
 }
 
-.linkedin-link {
+.linkedin-link,
+.trailhead-link {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -912,12 +913,20 @@ tbody tr:last-child td {
   border-color: #0a66c2;
 }
 
-.linkedin-link:focus-visible {
+.trailhead-link:hover {
+  color: #ffffff;
+  background: #0176d3;
+  border-color: #0176d3;
+}
+
+.linkedin-link:focus-visible,
+.trailhead-link:focus-visible {
   outline: 2px solid #93c5fd;
   outline-offset: 2px;
 }
 
-.linkedin-link svg {
+.linkedin-link svg,
+.trailhead-link svg {
   width: 14px;
   height: 14px;
   fill: currentColor;
