@@ -1733,14 +1733,25 @@ async function monitorTestExecution({ config, selectedTestClasses, runIds, execu
       renderExecutionFinalRows(selectedTestClasses, latestQueueByClass, failedResults);
 
       const hasFailures = summary.failed > 0 || summary.aborted > 0 || failedResults.length > 0;
+      const completionType = hasFailures ? "error" : "success";
+      const completionText = hasFailures
+        ? "Test execution completed with failures. Reloading coverage..."
+        : "Test execution completed successfully. Reloading coverage...";
+
+      setStatus(completionText, completionType);
+      await loadCoverage();
+
+      // If refresh failed, loadCoverage already set an error message.
+      if (statusEl.classList.contains("error")) {
+        return;
+      }
+
       if (hasFailures) {
         setStatus(
-          "Test execution completed with failures. Check Test Class Execution Result for failed methods and errors.",
+          "Test execution completed with failures and coverage is refreshed. Check Test Class Execution Result for failed methods and errors.",
           "error"
         );
       } else {
-        setStatus("Test execution completed successfully. Reloading coverage...", "success");
-        await loadCoverage();
         setStatus("Test execution completed successfully and coverage is refreshed.", "success");
       }
       return;
