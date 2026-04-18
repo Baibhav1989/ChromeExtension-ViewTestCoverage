@@ -63,6 +63,7 @@ const sortState = {
 };
 
 const STORAGE_KEY = "apexCoverageConfig";
+const launchSourceTabId = parseLaunchSourceTabId();
 
 initialize();
 
@@ -304,15 +305,19 @@ async function restoreConfig() {
     return;
   }
 
-  form.instanceUrl.value = config.instanceUrl || "";
-  form.accessToken.value = config.accessToken || "";
-  form.apiVersion.value = config.apiVersion || "60.0";
-  includeMethodDetailsEl.setAttribute("aria-pressed", Boolean(config.includeMethodDetails));
+  includeMethodDetailsEl.setAttribute(
+    "aria-pressed",
+    config.includeMethodDetails ?? false
+  );
   excludePackagesEl.setAttribute("aria-pressed", config.excludePackages ?? true);
 }
 
 async function persistConfig(config) {
-  await chrome.storage.local.set({ [STORAGE_KEY]: config });
+  const preferences = {
+    includeMethodDetails: Boolean(config.includeMethodDetails),
+    excludePackages: config.excludePackages ?? true
+  };
+  await chrome.storage.local.set({ [STORAGE_KEY]: preferences });
 }
 
 /**
@@ -661,7 +666,7 @@ function escapeHtml(value) {
 }
 
 async function fillSessionFromActiveTab() {
-  setStatus("Reading session from a Salesforce tab...", "");
+  setStatus("Reading session from selected Salesforce tab...", "");
 
   try {
     const tab = await getPreferredSalesforceTab();
@@ -689,25 +694,30 @@ async function fillSessionFromActiveTab() {
     const apiVersion = await detectApiVersion(resolvedInstanceUrl, sidCookie.value);
     form.apiVersion.value = apiVersion;
 
-    await persistConfig({
-      instanceUrl: form.instanceUrl.value,
-      accessToken: form.accessToken.value,
-      apiVersion: form.apiVersion.value
-    });
-
     setStatus("Session imported from Salesforce tab.", "success");
   } catch (error) {
     setStatus(getErrorMessage(error), "error");
   }
 }
 
+function parseLaunchSourceTabId() {
+  const params = new URLSearchParams(window.location.search);
+  const rawTabId = params.get("sourceTabId");
+  if (!rawTabId) {
+    return null;
+  }
+
+  const tabId = Number(rawTabId);
+  return Number.isInteger(tabId) ? tabId : null;
+}
+
 function buildCandidateInstanceOrigins(tabUrl) {
   const origins = [];
 
-  // Lightning pages usually need the sibling my.salesforce.com domain for sid/API.
-  if (tabUrl.hostname.endsWith(".lightning.force.com")) {
-    const mySalesforceHost = tabUrl.hostname.replace(/\.lightning\.force\.com$/i, ".my.salesforce.com");
-    origins.push(`https://${mySalesforceHost}`);
+  // Some Salesforce UIs run on setup/lightning domains while sid/API usually use my.salesforce.com.
+  const preferredApiHost = derivePreferredApiHost(tabUrl.hostname);
+  if (preferredApiHost) {
+    origins.push(`https://${preferredApiHost}`);
   }
 
   origins.push(tabUrl.origin);
@@ -734,9 +744,7 @@ async function findSalesforceSessionCookie(tabUrl, candidateOrigins) {
   }
 
   const tabHost = tabUrl.hostname.toLowerCase();
-  const preferredDomainFromLightning = tabHost.endsWith(".lightning.force.com")
-    ? tabHost.replace(/\.lightning\.force\.com$/i, ".my.salesforce.com")
-    : "";
+  const preferredDomainFromTab = derivePreferredApiHost(tabHost);
 
   const scored = sidCookies
     .filter((cookie) => cookie && cookie.domain && isSalesforceHost(cookie.domain.replace(/^\./, "")))
@@ -746,7 +754,7 @@ async function findSalesforceSessionCookie(tabUrl, candidateOrigins) {
       if (domain === tabHost) {
         score += 4;
       }
-      if (preferredDomainFromLightning && domain === preferredDomainFromLightning) {
+      if (preferredDomainFromTab && domain === preferredDomainFromTab) {
         score += 3;
       }
       if (tabHost.endsWith(domain)) {
@@ -792,15 +800,44 @@ async function detectApiVersion(instanceUrl, accessToken) {
 }
 
 function isSalesforceHost(hostname) {
+  const host = String(hostname || "").toLowerCase();
   return (
-    hostname.endsWith(".salesforce.com") ||
-    hostname.endsWith(".my.salesforce.com") ||
-    hostname.endsWith(".sandbox.my.salesforce.com") ||
-    hostname.endsWith(".force.com")
+    host.endsWith(".salesforce.com") ||
+    host.endsWith(".my.salesforce.com") ||
+    host.endsWith(".sandbox.my.salesforce.com") ||
+    host.endsWith(".force.com") ||
+    host === "salesforce-setup.com" ||
+    host.endsWith(".salesforce-setup.com") ||
+    host.endsWith(".my.salesforce-setup.com")
   );
 }
 
+function derivePreferredApiHost(hostname) {
+  const host = String(hostname || "").toLowerCase();
+  if (!host) {
+    return "";
+  }
+
+  if (host.endsWith(".lightning.force.com")) {
+    return host.replace(/\.lightning\.force\.com$/i, ".my.salesforce.com");
+  }
+
+  if (host.endsWith(".my.salesforce-setup.com")) {
+    return host.replace(/\.my\.salesforce-setup\.com$/i, ".my.salesforce.com");
+  }
+
+  if (host.endsWith(".salesforce-setup.com")) {
+    return host.replace(/\.salesforce-setup\.com$/i, ".my.salesforce.com");
+  }
+
+  return "";
+}
+
 async function getPreferredSalesforceTab() {
+  if (Number.isInteger(launchSourceTabId)) {
+    return await getLaunchSourceSalesforceTab();
+  }
+
   const tabs = await chrome.tabs.query({
     active: true,
     lastFocusedWindow: true
@@ -816,6 +853,19 @@ async function getPreferredSalesforceTab() {
     .sort((a, b) => (b.lastAccessed || 0) - (a.lastAccessed || 0));
 
   return salesforceTabs[0] || null;
+}
+
+async function getLaunchSourceSalesforceTab() {
+  if (!Number.isInteger(launchSourceTabId)) {
+    return null;
+  }
+
+  try {
+    const tab = await chrome.tabs.get(launchSourceTabId);
+    return isSalesforceTab(tab) ? tab : null;
+  } catch (_error) {
+    return null;
+  }
 }
 
 function isSalesforceTab(tab) {
@@ -1291,6 +1341,14 @@ function buildClassCoverageLineData(classBody, coverageRows) {
 
   for (const line of coveredLines) {
     uncoveredLines.delete(line);
+  }
+
+  // If Salesforce returns no line-level coverage payload (common for 0% classes),
+  // treat the full class source as uncovered so UI and counts are accurate.
+  if (coveredLines.size === 0 && uncoveredLines.size === 0) {
+    for (let lineNumber = 1; lineNumber <= sourceLines.length; lineNumber += 1) {
+      uncoveredLines.add(lineNumber);
+    }
   }
 
   const lineItems = [];
