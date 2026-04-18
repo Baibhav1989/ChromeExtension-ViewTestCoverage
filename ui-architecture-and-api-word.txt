@@ -1,0 +1,194 @@
+Apex Coverage Viewer - UI Architecture and API Details
+======================================================
+
+1) UI Architecture Diagram (Text Version)
+-----------------------------------------
+
+Browser / Chrome Runtime
+  |
+  +-- Extension icon click
+  |     API: chrome.action.onClicked
+  |
+  +-- background.js
+  |     API: chrome.windows.create({ state: "maximized" })
+  |     Passes sourceTabId to popup.html
+  |
+  +-- popup.js session resolution
+        APIs: chrome.tabs.get/query + chrome.cookies.get/getAll
+        Result: picks session of clicked Salesforce tab
+
+Extension UI Window
+  |
+  +-- popup.html + styles.css
+  |     Header, action card, summary card, collapsible sections, footer
+  |
+  +-- popup.js controller
+        - loadCoverage()
+        - executeSelectedTests()
+        - monitorTestExecution()
+        - filter/sort/search/export
+        - class source modal + line coloring
+
+Salesforce APIs
+  |
+  +-- Tooling API
+  |     ApexClass, ApexCodeCoverageAggregate, ApexCodeCoverage
+  |     ApexTestQueueItem, ApexTestResult, runTestsAsynchronous
+  |
+  +-- REST API
+  |     /services/data/ (version discovery)
+  |     /query (Organization)
+  |
+  +-- Chatter API
+        /chatter/users/me
+
+
+2) Implemented UI Logic
+-----------------------
+
+- Launch and context
+  background passes sourceTabId. popup resolves Salesforce session from clicked tab first.
+  User result: correct org session even with multiple Salesforce tabs.
+
+- Coverage load
+  Query ApexClass + ApexCodeCoverageAggregate, then render sorted/filtered list.
+  User result: Apex Classes section expands with refreshed summary.
+
+- Method-wise mode
+  Loads ApexCodeCoverage mapping + class method parsing.
+  User result: Method Coverage shows test methods mapped to Apex methods.
+
+- Execute tests
+  Uses runTestsAsynchronous and polls queue/result records.
+  User result: live execution status and failure details table.
+
+- Post-execution refresh
+  Coverage reload always happens after completion (pass or fail).
+  User result: Apex Classes and Test Execution stay expanded; Method Coverage collapses.
+
+- Class viewer modal
+  Loads full class source and marks lines as covered/uncovered/neutral.
+  User result: VS Code-style dark viewer with sticky line numbers.
+
+
+3) Chrome API Details with Examples
+-----------------------------------
+
+1. chrome.action.onClicked
+   Purpose: start extension flow from toolbar icon click.
+   Example:
+     chrome.action.onClicked.addListener((tab) => { ... });
+
+2. chrome.windows.create
+   Purpose: open extension in dedicated maximized window.
+   Example:
+     chrome.windows.create({ url: extensionUrl, type: "normal", state: "maximized" });
+
+3. chrome.tabs.get / chrome.tabs.query
+   Purpose: identify source and fallback Salesforce tabs.
+   Example:
+     const tab = await chrome.tabs.get(sourceTabId);
+     const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+
+4. chrome.cookies.get / chrome.cookies.getAll
+   Purpose: read Salesforce sid cookie for session auth.
+   Example:
+     chrome.cookies.get({ url: instanceUrl, name: "sid" }, callback);
+
+5. chrome.storage.local.get / set
+   Purpose: persist UI preferences (theme/toggles).
+   Example:
+     chrome.storage.local.set({ apexCoverageConfig: { theme: "dark" } });
+
+
+4) Salesforce API Details with Examples
+---------------------------------------
+
+1. Version discovery
+   Method + endpoint:
+     GET /services/data/
+   Example:
+     curl -H "Authorization: Bearer <token>" \
+       https://your-org.my.salesforce.com/services/data/
+
+2. Load class list
+   Method + endpoint:
+     GET /services/data/v60.0/tooling/query?q=<SOQL>
+   Object:
+     ApexClass
+   SOQL example:
+     SELECT Id, Name, NamespacePrefix FROM ApexClass ORDER BY Name
+
+3. Load class coverage
+   Method + endpoint:
+     GET /services/data/v60.0/tooling/query?q=<SOQL>
+   Object:
+     ApexCodeCoverageAggregate
+   SOQL example:
+     SELECT ApexClassOrTriggerId, NumLinesCovered, NumLinesUncovered
+     FROM ApexCodeCoverageAggregate
+     WHERE ApexClassOrTriggerId != null
+
+4. Method mapping
+   Method + endpoint:
+     GET /services/data/v60.0/tooling/query?q=<SOQL>
+   Object:
+     ApexCodeCoverage
+   SOQL example:
+     SELECT ApexTestClass.Name, TestMethodName, Coverage
+     FROM ApexCodeCoverage
+     WHERE ApexClassOrTriggerId = '01p...'
+
+5. Queue selected tests
+   Method + endpoint:
+     POST /services/data/v60.0/tooling/runTestsAsynchronous
+   Body examples:
+     {"classids":"01pXXXXXXXXXXXX"}
+     {"tests":[{"className":"MyTestClass"}]}
+
+6. Poll execution status
+   Method + endpoint:
+     GET /services/data/v60.0/tooling/query?q=<SOQL>
+   Objects:
+     ApexTestQueueItem, ApexTestResult
+   SOQL example:
+     SELECT Id, ApexClass.Name, Status, ExtendedStatus
+     FROM ApexTestQueueItem
+     ORDER BY CreatedDate DESC
+
+7. Header user context
+   Method + endpoint:
+     GET /services/data/v60.0/chatter/users/me
+
+8. Header environment context
+   Method + endpoint:
+     GET /services/data/v60.0/query?q=<SOQL>
+   Object:
+     Organization
+   SOQL example:
+     SELECT Name, IsSandbox, InstanceName FROM Organization LIMIT 1
+
+
+5) Metadata API Note (Optional)
+-------------------------------
+
+Current extension logic is based on Tooling API + REST API.
+Metadata API is optional and useful for retrieve/deploy workflows.
+
+SOAP endpoint pattern:
+  /services/Soap/m/<version>
+
+retrieve() skeleton:
+  <retrieve>
+    <retrieveRequest>
+      <apiVersion>60.0</apiVersion>
+      ...
+    </retrieveRequest>
+  </retrieve>
+
+deploy() skeleton:
+  <deploy>
+    <ZipFile>base64Zip</ZipFile>
+    <DeployOptions>...</DeployOptions>
+  </deploy>
+
