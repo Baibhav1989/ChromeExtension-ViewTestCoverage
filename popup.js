@@ -21,9 +21,9 @@ const summaryEl = document.getElementById("summary");
 const tableWrapperEl = document.getElementById("table-wrapper");
 const coverageBodyEl = document.getElementById("coverage-body");
 const searchEl = document.getElementById("search");
-const searchLabelEl = document.getElementById("search-label");
 const includeMethodDetailsEl = document.getElementById("include-method-details");
 const excludePackagesEl = document.getElementById("exclude-packages");
+const themeSelectEl = document.getElementById("theme-select");
 const methodDetailsSectionEl = document.getElementById("method-details");
 const methodDetailsTitleEl = document.getElementById("method-details-title");
 const methodDetailsHelpEl = document.getElementById("method-details-help");
@@ -38,6 +38,13 @@ const executeBtn = document.getElementById("execute-btn");
 const testExecutionResultsSectionEl = document.getElementById("test-execution-results");
 const testExecutionHelpEl = document.getElementById("test-execution-help");
 const testExecutionBodyEl = document.getElementById("test-execution-body");
+const classListSectionEl = document.getElementById("class-list-section");
+const classListContentEl = document.getElementById("class-list-content");
+const classListToggleEl = document.getElementById("class-list-toggle");
+const methodDetailsContentEl = document.getElementById("method-details-content");
+const methodDetailsToggleEl = document.getElementById("method-details-toggle");
+const testExecutionContentEl = document.getElementById("test-execution-content");
+const testExecutionToggleEl = document.getElementById("test-execution-toggle");
 const classCoverageModalEl = document.getElementById("class-coverage-modal");
 const classCoverageTitleEl = document.getElementById("class-coverage-title");
 const classCoverageSummaryEl = document.getElementById("class-coverage-summary");
@@ -73,9 +80,11 @@ async function initialize() {
   // Default: hide managed-package classes unless user changes it.
   excludePackagesEl.setAttribute("aria-pressed", "true");
   excludePackagesEl.disabled = false; // Enable the exclude packages button by default
+  applyTheme("light");
   await restoreConfig();
   fillSessionFromActiveTab(); // Auto-load session on startup
   initializeSortingControls();
+  initializeSectionToggleControls();
 
   // Form submission and coverage loading
   form.addEventListener("submit", async (event) => {
@@ -97,6 +106,7 @@ async function initialize() {
   includeMethodDetailsEl.addEventListener("click", async (event) => {
     event.preventDefault();
     toggleMethodDetailsView();
+    persistUiPreferences();
     await handleMethodViewToggle();
   });
 
@@ -104,9 +114,15 @@ async function initialize() {
   excludePackagesEl.addEventListener("click", (event) => {
     event.preventDefault();
     toggleExcludePackages();
+    persistUiPreferences();
     visibleRows = sortRows(filterRows(allRows, searchEl.value));
     renderRows(visibleRows);
     renderSummary(getSummaryRows(allRows));
+  });
+
+  themeSelectEl.addEventListener("change", () => {
+    applyTheme(themeSelectEl.value === "dark" ? "dark" : "light");
+    persistUiPreferences();
   });
 
   // Real-time search filtering
@@ -171,6 +187,9 @@ async function initialize() {
   // Ensure method details section is hidden on initialization
   methodDetailsSectionEl.classList.add("hidden");
   testExecutionResultsSectionEl.classList.add("hidden");
+  setSectionExpanded("classList", true);
+  setSectionExpanded("methodDetails", true);
+  setSectionExpanded("testExecution", true);
 
   // Disable export and execute buttons on initialization
   exportButton.disabled = true;
@@ -185,6 +204,87 @@ function toggleMethodDetailsView() {
 function toggleExcludePackages() {
   const isPressed = excludePackagesEl.getAttribute("aria-pressed") === "true";
   excludePackagesEl.setAttribute("aria-pressed", !isPressed);
+}
+
+function initializeSectionToggleControls() {
+  classListToggleEl.addEventListener("click", () => {
+    toggleSection("classList");
+  });
+  methodDetailsToggleEl.addEventListener("click", () => {
+    toggleSection("methodDetails");
+  });
+  testExecutionToggleEl.addEventListener("click", () => {
+    toggleSection("testExecution");
+  });
+}
+
+function getSectionControls(sectionKey) {
+  if (sectionKey === "classList") {
+    return { sectionEl: classListSectionEl, contentEl: classListContentEl, toggleEl: classListToggleEl };
+  }
+  if (sectionKey === "methodDetails") {
+    return { sectionEl: methodDetailsSectionEl, contentEl: methodDetailsContentEl, toggleEl: methodDetailsToggleEl };
+  }
+  if (sectionKey === "testExecution") {
+    return {
+      sectionEl: testExecutionResultsSectionEl,
+      contentEl: testExecutionContentEl,
+      toggleEl: testExecutionToggleEl
+    };
+  }
+  return null;
+}
+
+function setSectionExpanded(sectionKey, expanded) {
+  const controls = getSectionControls(sectionKey);
+  if (!controls) {
+    return;
+  }
+  controls.contentEl.classList.toggle("hidden", !expanded);
+  controls.toggleEl.setAttribute("aria-expanded", String(expanded));
+  controls.toggleEl.textContent = expanded ? "▴" : "▾";
+  const sectionName = controls.sectionEl.id.replace(/-/g, " ");
+  controls.toggleEl.setAttribute(
+    "aria-label",
+    expanded ? `Collapse ${sectionName} section` : `Expand ${sectionName} section`
+  );
+}
+
+function toggleSection(sectionKey) {
+  const controls = getSectionControls(sectionKey);
+  if (!controls || controls.sectionEl.classList.contains("hidden")) {
+    return;
+  }
+
+  const isExpanded = controls.toggleEl.getAttribute("aria-expanded") === "true";
+  setSectionExpanded(sectionKey, !isExpanded);
+}
+
+function expandSectionExclusive(activeSectionKey) {
+  setSectionExpanded("classList", activeSectionKey === "classList");
+  setSectionExpanded("methodDetails", activeSectionKey === "methodDetails");
+  setSectionExpanded("testExecution", activeSectionKey === "testExecution");
+}
+
+function applyTheme(theme) {
+  const isDark = theme === "dark";
+  document.body.classList.toggle("theme-dark", isDark);
+  themeSelectEl.value = isDark ? "dark" : "light";
+}
+
+function getCurrentTheme() {
+  return document.body.classList.contains("theme-dark") ? "dark" : "light";
+}
+
+function persistUiPreferences() {
+  const preferences = {
+    includeMethodDetails: includeMethodDetailsEl.getAttribute("aria-pressed") === "true",
+    excludePackages: excludePackagesEl.getAttribute("aria-pressed") === "true",
+    theme: getCurrentTheme()
+  };
+  persistConfig(preferences).catch(() => {
+    // ignore transient storage failures
+  });
 }
 
 function initializeSortingControls() {
@@ -304,6 +404,7 @@ async function restoreConfig() {
 
   if (!config) {
     excludePackagesEl.setAttribute("aria-pressed", "true");
+    applyTheme("light");
     return;
   }
 
@@ -312,12 +413,14 @@ async function restoreConfig() {
     config.includeMethodDetails ?? false
   );
   excludePackagesEl.setAttribute("aria-pressed", config.excludePackages ?? true);
+  applyTheme(config.theme === "dark" ? "dark" : "light");
 }
 
 async function persistConfig(config) {
   const preferences = {
     includeMethodDetails: Boolean(config.includeMethodDetails),
-    excludePackages: config.excludePackages ?? true
+    excludePackages: config.excludePackages ?? true,
+    theme: config.theme === "dark" ? "dark" : getCurrentTheme()
   };
   await chrome.storage.local.set({ [STORAGE_KEY]: preferences });
 }
@@ -327,7 +430,9 @@ async function persistConfig(config) {
  * Queries ApexClass and ApexCodeCoverageAggregate objects
  * Separates test classes and renders results with filtering
  */
-async function loadCoverage() {
+async function loadCoverage(options = {}) {
+  const preserveExpandedSections = options.preserveExpandedSections === true;
+  const collapseMethodDetailsSection = options.collapseMethodDetailsSection === true;
   const config = {
     instanceUrl: (form.instanceUrl.value || "").trim().replace(/\/+$/, ""),
     accessToken: (form.accessToken.value || "").trim(),
@@ -373,6 +478,14 @@ async function loadCoverage() {
     toggleResults(true);
     toggleTestButton(testClasses.length > 0);
     await handleMethodViewToggle();
+    if (preserveExpandedSections) {
+      setSectionExpanded("classList", true);
+    } else {
+      expandSectionExclusive("classList");
+    }
+    if (collapseMethodDetailsSection && !methodDetailsSectionEl.classList.contains("hidden")) {
+      setSectionExpanded("methodDetails", false);
+    }
     setStatus(`Loaded ${allRows.length} Apex classes (${testClasses.length} test classes).`, "success");
   } catch (error) {
     setStatus(getErrorMessage(error), "error");
@@ -608,10 +721,13 @@ function clearResults() {
 }
 
 function toggleResults(show) {
+  classListSectionEl.classList.toggle("hidden", !show);
   tableWrapperEl.classList.toggle("hidden", !show);
-  searchEl.classList.toggle("hidden", !show);
-  searchLabelEl.classList.toggle("hidden", !show);
+  searchEl.disabled = !show;
   exportButton.classList.toggle("hidden", !show);
+  if (show) {
+    setSectionExpanded("classList", true);
+  }
   // Enable export button when showing results, disable when hiding
   exportButton.disabled = !show;
   // Hide and disable execute tests button when clearing results; will be shown by toggleTestButton if test classes exist
@@ -1084,6 +1200,7 @@ async function handleClassSelection(classId, className) {
   }
 
   methodDetailsSectionEl.classList.remove("hidden");
+  setSectionExpanded("methodDetails", true);
   methodDetailsTitleEl.textContent = `Method Coverage - ${className}`;
   methodDetailsHelpEl.textContent = "Loading method to test mapping...";
   methodDetailsBodyEl.innerHTML = "";
@@ -1588,6 +1705,7 @@ function setExecutionUiState(isRunning) {
 
 function initializeTestExecutionTable(selectedTestClasses) {
   testExecutionResultsSectionEl.classList.remove("hidden");
+  expandSectionExclusive("testExecution");
   testExecutionHelpEl.textContent =
     "Execution started. Tracking queue status for selected test classes...";
   renderExecutionProgressRows(selectedTestClasses, new Map(), true);
@@ -1624,14 +1742,28 @@ async function monitorTestExecution({ config, selectedTestClasses, runIds, execu
       renderExecutionFinalRows(selectedTestClasses, latestQueueByClass, failedResults);
 
       const hasFailures = summary.failed > 0 || summary.aborted > 0 || failedResults.length > 0;
+      const completionType = hasFailures ? "error" : "success";
+      const completionText = hasFailures
+        ? "Test execution completed with failures. Reloading coverage..."
+        : "Test execution completed successfully. Reloading coverage...";
+
+      setStatus(completionText, completionType);
+      await loadCoverage({
+        preserveExpandedSections: true,
+        collapseMethodDetailsSection: true
+      });
+
+      // If refresh failed, loadCoverage already set an error message.
+      if (statusEl.classList.contains("error")) {
+        return;
+      }
+
       if (hasFailures) {
         setStatus(
-          "Test execution completed with failures. Check Test Class Execution Result for failed methods and errors.",
+          "Test execution completed with failures and coverage is refreshed. Check Test Class Execution Result for failed methods and errors.",
           "error"
         );
       } else {
-        setStatus("Test execution completed successfully. Reloading coverage...", "success");
-        await loadCoverage();
         setStatus("Test execution completed successfully and coverage is refreshed.", "success");
       }
       return;
