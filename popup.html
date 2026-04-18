@@ -111,90 +111,114 @@
 
       <p id="status" class="status"></p>
 
-      <label for="search" class="hidden" id="search-label">Filter Classes</label>
-      <input
-        id="search"
-        class="hidden"
-        type="text"
-        placeholder="Type class name..."
-      />
+      <section id="class-list-section" class="data-section hidden">
+        <div class="section-header">
+          <h2>Class List</h2>
+          <button id="class-list-toggle" type="button" class="collapse-toggle" aria-expanded="true">
+            Collapse
+          </button>
+        </div>
+        <div id="class-list-content">
+          <label for="search" class="hidden" id="search-label">Filter Classes</label>
+          <input
+            id="search"
+            class="hidden"
+            type="text"
+            placeholder="Type class name..."
+          />
 
-      <div id="table-wrapper" class="table-wrapper hidden">
-        <table>
-          <thead>
-            <tr>
-              <th>
-                <button type="button" class="sort-header" data-sort-key="name">
-                  Class Name
-                  <span class="sort-indicator" aria-hidden="true"></span>
-                </button>
-              </th>
-              <th>
-                <button type="button" class="sort-header" data-sort-key="namespace">
-                  Namespace
-                  <span class="sort-indicator" aria-hidden="true"></span>
-                </button>
-              </th>
-              <th>
-                <button type="button" class="sort-header" data-sort-key="covered">
-                  Covered
-                  <span class="sort-indicator" aria-hidden="true"></span>
-                </button>
-              </th>
-              <th>
-                <button type="button" class="sort-header" data-sort-key="uncovered">
-                  Uncovered
-                  <span class="sort-indicator" aria-hidden="true"></span>
-                </button>
-              </th>
-              <th>
-                <button type="button" class="sort-header" data-sort-key="percent">
-                  Coverage %
-                  <span class="sort-indicator" aria-hidden="true"></span>
-                </button>
-              </th>
-              <th>Action</th>
-            </tr>
-          </thead>
-          <tbody id="coverage-body"></tbody>
-        </table>
-      </div>
+          <div id="table-wrapper" class="table-wrapper hidden">
+            <table>
+              <thead>
+                <tr>
+                  <th>
+                    <button type="button" class="sort-header" data-sort-key="name">
+                      Class Name
+                      <span class="sort-indicator" aria-hidden="true"></span>
+                    </button>
+                  </th>
+                  <th>
+                    <button type="button" class="sort-header" data-sort-key="namespace">
+                      Namespace
+                      <span class="sort-indicator" aria-hidden="true"></span>
+                    </button>
+                  </th>
+                  <th>
+                    <button type="button" class="sort-header" data-sort-key="covered">
+                      Covered
+                      <span class="sort-indicator" aria-hidden="true"></span>
+                    </button>
+                  </th>
+                  <th>
+                    <button type="button" class="sort-header" data-sort-key="uncovered">
+                      Uncovered
+                      <span class="sort-indicator" aria-hidden="true"></span>
+                    </button>
+                  </th>
+                  <th>
+                    <button type="button" class="sort-header" data-sort-key="percent">
+                      Coverage %
+                      <span class="sort-indicator" aria-hidden="true"></span>
+                    </button>
+                  </th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="coverage-body"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
 
       <section id="method-details" class="method-details hidden" tabindex="-1">
-        <h2 id="method-details-title">Method Coverage</h2>
-        <p id="method-details-help" class="muted">
-          Enable method-wise view and click any class row to see test mapping.
-        </p>
-        <div class="table-wrapper">
-          <table>
-            <thead>
-              <tr>
-                <th>Method</th>
-                <th>Covered By Test Methods</th>
-              </tr>
-            </thead>
-            <tbody id="method-details-body"></tbody>
-          </table>
+        <div class="section-header">
+          <h2 id="method-details-title">Method Coverage</h2>
+          <button id="method-details-toggle" type="button" class="collapse-toggle" aria-expanded="true">
+            Collapse
+          </button>
+        </div>
+        <div id="method-details-content">
+          <p id="method-details-help" class="muted">
+            Enable method-wise view and click any class row to see test mapping.
+          </p>
+          <div class="table-wrapper">
+            <table>
+              <thead>
+                <tr>
+                  <th>Method</th>
+                  <th>Covered By Test Methods</th>
+                </tr>
+              </thead>
+              <tbody id="method-details-body"></tbody>
+            </table>
+          </div>
         </div>
       </section>
 
       <section id="test-execution-results" class="test-execution-results hidden">
-        <h2>Test Class Execution Result</h2>
-        <p id="test-execution-help" class="muted">
-          Select and execute test classes to track running status and failures.
-        </p>
-        <div class="table-wrapper">
-          <table>
-            <thead>
-              <tr>
-                <th>Test Class</th>
-                <th>Failed Method</th>
-                <th>Status</th>
-                <th>Error</th>
-              </tr>
-            </thead>
-            <tbody id="test-execution-body"></tbody>
-          </table>
+        <div class="section-header">
+          <h2>Test Class Execution Result</h2>
+          <button id="test-execution-toggle" type="button" class="collapse-toggle" aria-expanded="true">
+            Collapse
+          </button>
+        </div>
+        <div id="test-execution-content">
+          <p id="test-execution-help" class="muted">
+            Select and execute test classes to track running status and failures.
+          </p>
+          <div class="table-wrapper">
+            <table>
+              <thead>
+                <tr>
+                  <th>Test Class</th>
+                  <th>Failed Method</th>
+                  <th>Status</th>
+                  <th>Error</th>
+                </tr>
+              </thead>
+              <tbody id="test-execution-body"></tbody>
+            </table>
+          </div>
         </div>
       </section>
     </main>

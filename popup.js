@@ -39,6 +39,13 @@ const executeBtn = document.getElementById("execute-btn");
 const testExecutionResultsSectionEl = document.getElementById("test-execution-results");
 const testExecutionHelpEl = document.getElementById("test-execution-help");
 const testExecutionBodyEl = document.getElementById("test-execution-body");
+const classListSectionEl = document.getElementById("class-list-section");
+const classListContentEl = document.getElementById("class-list-content");
+const classListToggleEl = document.getElementById("class-list-toggle");
+const methodDetailsContentEl = document.getElementById("method-details-content");
+const methodDetailsToggleEl = document.getElementById("method-details-toggle");
+const testExecutionContentEl = document.getElementById("test-execution-content");
+const testExecutionToggleEl = document.getElementById("test-execution-toggle");
 const classCoverageModalEl = document.getElementById("class-coverage-modal");
 const classCoverageTitleEl = document.getElementById("class-coverage-title");
 const classCoverageSummaryEl = document.getElementById("class-coverage-summary");
@@ -78,6 +85,7 @@ async function initialize() {
   await restoreConfig();
   fillSessionFromActiveTab(); // Auto-load session on startup
   initializeSortingControls();
+  initializeSectionToggleControls();
 
   // Form submission and coverage loading
   form.addEventListener("submit", async (event) => {
@@ -180,6 +188,9 @@ async function initialize() {
   // Ensure method details section is hidden on initialization
   methodDetailsSectionEl.classList.add("hidden");
   testExecutionResultsSectionEl.classList.add("hidden");
+  setSectionExpanded("classList", true);
+  setSectionExpanded("methodDetails", true);
+  setSectionExpanded("testExecution", true);
 
   // Disable export and execute buttons on initialization
   exportButton.disabled = true;
@@ -194,6 +205,61 @@ function toggleMethodDetailsView() {
 function toggleExcludePackages() {
   const isPressed = excludePackagesEl.getAttribute("aria-pressed") === "true";
   excludePackagesEl.setAttribute("aria-pressed", !isPressed);
+}
+
+function initializeSectionToggleControls() {
+  classListToggleEl.addEventListener("click", () => {
+    toggleSection("classList");
+  });
+  methodDetailsToggleEl.addEventListener("click", () => {
+    toggleSection("methodDetails");
+  });
+  testExecutionToggleEl.addEventListener("click", () => {
+    toggleSection("testExecution");
+  });
+}
+
+function getSectionControls(sectionKey) {
+  if (sectionKey === "classList") {
+    return { sectionEl: classListSectionEl, contentEl: classListContentEl, toggleEl: classListToggleEl };
+  }
+  if (sectionKey === "methodDetails") {
+    return { sectionEl: methodDetailsSectionEl, contentEl: methodDetailsContentEl, toggleEl: methodDetailsToggleEl };
+  }
+  if (sectionKey === "testExecution") {
+    return {
+      sectionEl: testExecutionResultsSectionEl,
+      contentEl: testExecutionContentEl,
+      toggleEl: testExecutionToggleEl
+    };
+  }
+  return null;
+}
+
+function setSectionExpanded(sectionKey, expanded) {
+  const controls = getSectionControls(sectionKey);
+  if (!controls) {
+    return;
+  }
+  controls.contentEl.classList.toggle("hidden", !expanded);
+  controls.toggleEl.setAttribute("aria-expanded", String(expanded));
+  controls.toggleEl.textContent = expanded ? "Collapse" : "Expand";
+}
+
+function toggleSection(sectionKey) {
+  const controls = getSectionControls(sectionKey);
+  if (!controls || controls.sectionEl.classList.contains("hidden")) {
+    return;
+  }
+
+  const isExpanded = controls.toggleEl.getAttribute("aria-expanded") === "true";
+  setSectionExpanded(sectionKey, !isExpanded);
+}
+
+function expandSectionExclusive(activeSectionKey) {
+  setSectionExpanded("classList", activeSectionKey === "classList");
+  setSectionExpanded("methodDetails", activeSectionKey === "methodDetails");
+  setSectionExpanded("testExecution", activeSectionKey === "testExecution");
 }
 
 function applyTheme(theme) {
@@ -406,6 +472,7 @@ async function loadCoverage() {
     toggleResults(true);
     toggleTestButton(testClasses.length > 0);
     await handleMethodViewToggle();
+    expandSectionExclusive("classList");
     setStatus(`Loaded ${allRows.length} Apex classes (${testClasses.length} test classes).`, "success");
   } catch (error) {
     setStatus(getErrorMessage(error), "error");
@@ -641,10 +708,14 @@ function clearResults() {
 }
 
 function toggleResults(show) {
+  classListSectionEl.classList.toggle("hidden", !show);
   tableWrapperEl.classList.toggle("hidden", !show);
   searchEl.classList.toggle("hidden", !show);
   searchLabelEl.classList.toggle("hidden", !show);
   exportButton.classList.toggle("hidden", !show);
+  if (show) {
+    setSectionExpanded("classList", true);
+  }
   // Enable export button when showing results, disable when hiding
   exportButton.disabled = !show;
   // Hide and disable execute tests button when clearing results; will be shown by toggleTestButton if test classes exist
@@ -1117,6 +1188,7 @@ async function handleClassSelection(classId, className) {
   }
 
   methodDetailsSectionEl.classList.remove("hidden");
+  setSectionExpanded("methodDetails", true);
   methodDetailsTitleEl.textContent = `Method Coverage - ${className}`;
   methodDetailsHelpEl.textContent = "Loading method to test mapping...";
   methodDetailsBodyEl.innerHTML = "";
@@ -1621,6 +1693,7 @@ function setExecutionUiState(isRunning) {
 
 function initializeTestExecutionTable(selectedTestClasses) {
   testExecutionResultsSectionEl.classList.remove("hidden");
+  expandSectionExclusive("testExecution");
   testExecutionHelpEl.textContent =
     "Execution started. Tracking queue status for selected test classes...";
   renderExecutionProgressRows(selectedTestClasses, new Map(), true);
