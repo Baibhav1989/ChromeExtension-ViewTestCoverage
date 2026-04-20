@@ -542,6 +542,7 @@ function toggleTestButton(show) {
 }
 
 async function queryAll(config, soql) {
+  assertTrustedInstanceUrl(config.instanceUrl);
   const records = [];
   let nextPath = `/services/data/v${config.apiVersion}/tooling/query?q=${encodeURIComponent(soql)}`;
 
@@ -831,6 +832,7 @@ async function fillSessionFromActiveTab() {
     }
 
     const resolvedInstanceUrl = candidateOrigins[0] || tabUrl.origin;
+    assertTrustedInstanceUrl(resolvedInstanceUrl);
     form.instanceUrl.value = resolvedInstanceUrl;
     form.accessToken.value = sidCookie.value;
 
@@ -897,7 +899,9 @@ function buildCandidateInstanceOrigins(tabUrl) {
     origins.push(`https://${preferredApiHost}`);
   }
 
-  origins.push(tabUrl.origin);
+  if (isTrustedApiHost(tabUrl.hostname)) {
+    origins.push(tabUrl.origin);
+  }
 
   // Deduplicate while preserving priority order.
   return Array.from(new Set(origins));
@@ -905,6 +909,10 @@ function buildCandidateInstanceOrigins(tabUrl) {
 
 async function findSalesforceSessionCookie(tabUrl, candidateOrigins) {
   for (const origin of candidateOrigins) {
+    const originHost = new URL(origin).hostname.toLowerCase();
+    if (!isTrustedApiHost(originHost)) {
+      continue;
+    }
     const cookie = await chrome.cookies.get({
       url: origin,
       name: "sid"
@@ -914,41 +922,12 @@ async function findSalesforceSessionCookie(tabUrl, candidateOrigins) {
     }
   }
 
-  // Fallback: search across all sid cookies and pick one that best matches the active Salesforce tab.
-  const sidCookies = await chrome.cookies.getAll({ name: "sid" });
-  if (!Array.isArray(sidCookies) || sidCookies.length === 0) {
-    return null;
-  }
-
-  const tabHost = tabUrl.hostname.toLowerCase();
-  const preferredDomainFromTab = derivePreferredApiHost(tabHost);
-
-  const scored = sidCookies
-    .filter((cookie) => cookie && cookie.domain && isSalesforceHost(cookie.domain.replace(/^\./, "")))
-    .map((cookie) => {
-      const domain = cookie.domain.replace(/^\./, "").toLowerCase();
-      let score = 0;
-      if (domain === tabHost) {
-        score += 4;
-      }
-      if (preferredDomainFromTab && domain === preferredDomainFromTab) {
-        score += 3;
-      }
-      if (tabHost.endsWith(domain)) {
-        score += 2;
-      }
-      if (domain.endsWith(".my.salesforce.com")) {
-        score += 1;
-      }
-      return { cookie, score };
-    })
-    .sort((a, b) => b.score - a.score);
-
-  return scored.length > 0 ? scored[0].cookie : null;
+  return null;
 }
 
 async function detectApiVersion(instanceUrl, accessToken) {
   try {
+    assertTrustedInstanceUrl(instanceUrl);
     const response = await fetch(`${instanceUrl}/services/data/`, {
       method: "GET",
       headers: {
@@ -1027,6 +1006,7 @@ function deriveEnvironmentFromUrl(instanceUrl) {
 }
 
 async function querySingleRecord(config, soql) {
+  assertTrustedInstanceUrl(config.instanceUrl);
   const queryPath = `/services/data/v${config.apiVersion}/query?q=${encodeURIComponent(soql)}`;
   const response = await fetch(`${config.instanceUrl}${queryPath}`, {
     method: "GET",
@@ -1049,12 +1029,28 @@ function isSalesforceHost(hostname) {
   return (
     host.endsWith(".salesforce.com") ||
     host.endsWith(".my.salesforce.com") ||
-    host.endsWith(".sandbox.my.salesforce.com") ||
-    host.endsWith(".force.com") ||
     host === "salesforce-setup.com" ||
     host.endsWith(".salesforce-setup.com") ||
     host.endsWith(".my.salesforce-setup.com")
   );
+}
+
+function isTrustedApiHost(hostname) {
+  const host = String(hostname || "").toLowerCase();
+  return host.endsWith(".my.salesforce.com");
+}
+
+function assertTrustedInstanceUrl(instanceUrl) {
+  let parsedUrl;
+  try {
+    parsedUrl = new URL(instanceUrl);
+  } catch (_error) {
+    throw new Error("Invalid Salesforce instance URL.");
+  }
+
+  if (!isTrustedApiHost(parsedUrl.hostname)) {
+    throw new Error("Unsupported Salesforce domain. Open an org tab on *.my.salesforce.com and retry.");
+  }
 }
 
 function derivePreferredApiHost(hostname) {
@@ -1092,12 +1088,7 @@ async function getPreferredSalesforceTab() {
     return activeTab;
   }
 
-  const allTabs = await chrome.tabs.query({});
-  const salesforceTabs = allTabs
-    .filter((tab) => isSalesforceTab(tab))
-    .sort((a, b) => (b.lastAccessed || 0) - (a.lastAccessed || 0));
-
-  return salesforceTabs[0] || null;
+  return null;
 }
 
 async function getLaunchSourceSalesforceTab() {
@@ -1413,18 +1404,24 @@ function renderMethodDetails(items) {
   methodDetailsBodyEl.innerHTML = "";
 
   if (!items || items.length === 0) {
-    methodDetailsBodyEl.innerHTML =
-      "<tr><td colspan=\"2\">No method-level mapping found for this class.</td></tr>";
+    const tr = document.createElement("tr");
+    const td = document.createElement("td");
+    td.colSpan = 2;
+    td.textContent = "No method-level mapping found for this class.";
+    tr.appendChild(td);
+    methodDetailsBodyEl.appendChild(tr);
     return;
   }
 
   for (const item of items) {
     const testsText = item.tests.length > 0 ? item.tests.join(", ") : "No test mapping";
     const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td>${escapeHtml(item.methodName)}</td>
-      <td>${escapeHtml(testsText)}</td>
-    `;
+    const methodCell = document.createElement("td");
+    methodCell.textContent = item.methodName;
+    const testsCell = document.createElement("td");
+    testsCell.textContent = testsText;
+    tr.appendChild(methodCell);
+    tr.appendChild(testsCell);
     methodDetailsBodyEl.appendChild(tr);
   }
 }
@@ -1462,20 +1459,35 @@ function showTestClassesModal() {
     return true;
   });
 
-  const listHtml = filteredTestClasses.map((testClass) => `
-    <div class="test-class-item">
-      <label>
-        <input type="checkbox" class="test-class-checkbox" value="${escapeHtml(testClass.Id)}" data-name="${escapeHtml(testClass.Name)}" />
-        ${escapeHtml(testClass.Name)}
-        <span class="test-namespace">${escapeHtml(testClass.NamespacePrefix || "-")}</span>
-      </label>
-    </div>
-  `).join("");
-
-  if (!listHtml) {
-    testClassesListEl.innerHTML = "<p style='text-align: center; color: #64748b;'>No test classes found.</p>";
+  if (filteredTestClasses.length === 0) {
+    const emptyMessage = document.createElement("p");
+    emptyMessage.style.textAlign = "center";
+    emptyMessage.style.color = "#64748b";
+    emptyMessage.textContent = "No test classes found.";
+    testClassesListEl.appendChild(emptyMessage);
   } else {
-    testClassesListEl.innerHTML = listHtml;
+    for (const testClass of filteredTestClasses) {
+      const item = document.createElement("div");
+      item.className = "test-class-item";
+
+      const label = document.createElement("label");
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.className = "test-class-checkbox";
+      checkbox.value = String(testClass.Id || "");
+      checkbox.setAttribute("data-name", String(testClass.Name || ""));
+
+      const nameText = document.createTextNode(String(testClass.Name || ""));
+      const namespace = document.createElement("span");
+      namespace.className = "test-namespace";
+      namespace.textContent = String(testClass.NamespacePrefix || "-");
+
+      label.appendChild(checkbox);
+      label.appendChild(nameText);
+      label.appendChild(namespace);
+      item.appendChild(label);
+      testClassesListEl.appendChild(item);
+    }
   }
 
   testModalEl.classList.remove("hidden");
@@ -1532,6 +1544,7 @@ async function getClassCoverageDetails(classId) {
 }
 
 async function fetchApexClassSource(classId) {
+  assertTrustedInstanceUrl(currentConfig.instanceUrl);
   const classUrl =
     `${currentConfig.instanceUrl}/services/data/v${currentConfig.apiVersion}` +
     `/tooling/sobjects/ApexClass/${encodeURIComponent(classId)}`;
@@ -1982,12 +1995,26 @@ function renderExecutionFinalRows(selectedTestClasses, latestQueueByClass, faile
 function appendTestExecutionRow({ className, failedMethod, status, errorMessage }) {
   const statusLabel = String(status || "Unknown");
   const tr = document.createElement("tr");
-  tr.innerHTML = `
-    <td>${escapeHtml(className || "UnknownClass")}</td>
-    <td>${escapeHtml(failedMethod || "-")}</td>
-    <td><span class="${getTestStatusClass(statusLabel)}">${escapeHtml(statusLabel)}</span></td>
-    <td class="test-error-cell">${escapeHtml(errorMessage || "-")}</td>
-  `;
+  const classCell = document.createElement("td");
+  classCell.textContent = className || "UnknownClass";
+
+  const methodCell = document.createElement("td");
+  methodCell.textContent = failedMethod || "-";
+
+  const statusCell = document.createElement("td");
+  const statusChip = document.createElement("span");
+  statusChip.className = getTestStatusClass(statusLabel);
+  statusChip.textContent = statusLabel;
+  statusCell.appendChild(statusChip);
+
+  const errorCell = document.createElement("td");
+  errorCell.className = "test-error-cell";
+  errorCell.textContent = errorMessage || "-";
+
+  tr.appendChild(classCell);
+  tr.appendChild(methodCell);
+  tr.appendChild(statusCell);
+  tr.appendChild(errorCell);
   testExecutionBodyEl.appendChild(tr);
 }
 

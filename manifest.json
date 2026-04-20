@@ -22,10 +22,7 @@
     "cookies"
   ],
   "host_permissions": [
-    "https://*.salesforce.com/*",
     "https://*.my.salesforce.com/*",
-    "https://*.sandbox.my.salesforce.com/*",
-    "https://*.force.com/*",
     "https://*.lightning.force.com/*"
   ]
 }
