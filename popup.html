@@ -231,6 +231,11 @@
           <p id="test-execution-help" class="muted">
             Select and execute test classes to track running status and failures.
           </p>
+          <div class="test-execution-actions">
+            <button id="abort-all-tests-button" type="button" class="secondary" disabled>
+              Abort All
+            </button>
+          </div>
           <div class="table-wrapper">
             <table>
               <thead>
@@ -239,6 +244,7 @@
                   <th>Failed Method</th>
                   <th>Status</th>
                   <th>Error</th>
+                  <th>Action</th>
                 </tr>
               </thead>
               <tbody id="test-execution-body"></tbody>
@@ -256,6 +262,13 @@
           <button id="modal-close" type="button" class="modal-close">&times;</button>
         </div>
         <div class="modal-body">
+          <input
+            id="test-class-search"
+            class="test-class-search"
+            type="text"
+            placeholder="Search test classes..."
+            aria-label="Search test classes"
+          />
           <div id="test-classes-list" class="test-classes-list"></div>
         </div>
         <div class="modal-footer">
@@ -314,7 +327,7 @@
           </svg>
         </a>
         <span class="footer-divider">•</span>
-        <span class="footer-text">v1.0.0</span>
+        <span id="extension-version" class="footer-text">v-</span>
       </div>
     </footer>
 

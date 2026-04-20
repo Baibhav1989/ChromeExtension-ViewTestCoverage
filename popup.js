@@ -29,6 +29,7 @@ const methodDetailsTitleEl = document.getElementById("method-details-title");
 const methodDetailsHelpEl = document.getElementById("method-details-help");
 const methodDetailsBodyEl = document.getElementById("method-details-body");
 const testModalEl = document.getElementById("test-modal");
+const testClassSearchEl = document.getElementById("test-class-search");
 const testClassesListEl = document.getElementById("test-classes-list");
 const modalCloseBtn = document.getElementById("modal-close");
 const modalCancelBtn = document.getElementById("modal-cancel");
@@ -38,6 +39,7 @@ const executeBtn = document.getElementById("execute-btn");
 const testExecutionResultsSectionEl = document.getElementById("test-execution-results");
 const testExecutionHelpEl = document.getElementById("test-execution-help");
 const testExecutionBodyEl = document.getElementById("test-execution-body");
+const abortAllTestsButtonEl = document.getElementById("abort-all-tests-button");
 const classListSectionEl = document.getElementById("class-list-section");
 const classListContentEl = document.getElementById("class-list-content");
 const classListToggleEl = document.getElementById("class-list-toggle");
@@ -54,6 +56,7 @@ const classCoverageDoneBtn = document.getElementById("class-coverage-done");
 const sortHeaderButtons = Array.from(document.querySelectorAll(".sort-header"));
 const sfUserNameEl = document.getElementById("sf-user-name");
 const sfEnvNameEl = document.getElementById("sf-env-name");
+const extensionVersionEl = document.getElementById("extension-version");
 
 const TERMINAL_TEST_QUEUE_STATUSES = new Set(["Completed", "Failed", "Aborted"]);
 const POLLING_TEST_QUEUE_STATUSES = new Set(["Queued", "Preparing", "Holding", "Processing"]);
@@ -64,6 +67,11 @@ let testClasses = [];
 let selectedClassId = null;
 let currentConfig = null;
 let isTestExecutionInProgress = false;
+let activeExecutionConfig = null;
+let activeExecutionSelectedTestClasses = [];
+let activeLatestQueueByClass = new Map();
+const pendingAbortClassIds = new Set();
+const inFlightAbortClassIds = new Set();
 const methodCoverageCache = new Map();
 const classCoverageCache = new Map();
 const sortState = {
@@ -77,12 +85,12 @@ const launchSourceTabId = parseLaunchSourceTabId();
 initialize();
 
 async function initialize() {
+  setExtensionVersion();
   // Default: hide managed-package classes unless user changes it.
   excludePackagesEl.setAttribute("aria-pressed", "true");
   excludePackagesEl.disabled = false; // Enable the exclude packages button by default
   applyTheme("light");
   await restoreConfig();
-  fillSessionFromActiveTab(); // Auto-load session on startup
   initializeSortingControls();
   initializeSectionToggleControls();
 
@@ -137,6 +145,10 @@ async function initialize() {
     showTestClassesModal();
   });
 
+  testClassSearchEl.addEventListener("input", () => {
+    renderTestClassesModalList(testClassSearchEl.value);
+  });
+
   // Modal controls
   modalCloseBtn.addEventListener("click", () => {
     closeTestModal();
@@ -171,6 +183,24 @@ async function initialize() {
     await executeSelectedTests();
   });
 
+  abortAllTestsButtonEl.addEventListener("click", async () => {
+    await abortAllRunningTests();
+  });
+
+  testExecutionBodyEl.addEventListener("click", async (event) => {
+    const abortButton = event.target.closest(".test-execution-action-btn");
+    if (!abortButton) {
+      return;
+    }
+
+    const classId = abortButton.getAttribute("data-class-id");
+    if (!classId) {
+      return;
+    }
+
+    await abortSingleTestClassById(classId);
+  });
+
   // Modal backdrop click handler
   testModalEl.addEventListener("click", (event) => {
     if (event.target === testModalEl) {
@@ -194,6 +224,21 @@ async function initialize() {
   // Disable export and execute buttons on initialization
   exportButton.disabled = true;
   executeTestsButton.disabled = true;
+
+  // On popup open, try importing session and auto-load coverage.
+  await fillSessionFromActiveTab();
+  if (form.instanceUrl.value && form.accessToken.value && form.apiVersion.value) {
+    await loadCoverage();
+  }
+}
+
+function setExtensionVersion() {
+  if (!extensionVersionEl) {
+    return;
+  }
+
+  const manifestVersion = chrome.runtime.getManifest().version;
+  extensionVersionEl.textContent = manifestVersion ? `v${manifestVersion}` : "v-";
 }
 
 function toggleMethodDetailsView() {
@@ -531,6 +576,7 @@ function toggleTestButton(show) {
 }
 
 async function queryAll(config, soql) {
+  assertTrustedInstanceUrl(config.instanceUrl);
   const records = [];
   let nextPath = `/services/data/v${config.apiVersion}/tooling/query?q=${encodeURIComponent(soql)}`;
 
@@ -747,6 +793,8 @@ function setLoading(isLoading) {
   executeTestsButton.disabled = isLoading;
   includeMethodDetailsEl.disabled = isLoading;
   loadButton.textContent = isLoading ? "Loading..." : "Load Coverage";
+  loadButton.classList.toggle("button-loading", isLoading);
+  loadButton.setAttribute("aria-busy", isLoading ? "true" : "false");
 }
 
 function setStatus(message, type) {
@@ -820,6 +868,7 @@ async function fillSessionFromActiveTab() {
     }
 
     const resolvedInstanceUrl = candidateOrigins[0] || tabUrl.origin;
+    assertTrustedInstanceUrl(resolvedInstanceUrl);
     form.instanceUrl.value = resolvedInstanceUrl;
     form.accessToken.value = sidCookie.value;
 
@@ -886,7 +935,9 @@ function buildCandidateInstanceOrigins(tabUrl) {
     origins.push(`https://${preferredApiHost}`);
   }
 
-  origins.push(tabUrl.origin);
+  if (isTrustedApiHost(tabUrl.hostname)) {
+    origins.push(tabUrl.origin);
+  }
 
   // Deduplicate while preserving priority order.
   return Array.from(new Set(origins));
@@ -894,6 +945,10 @@ function buildCandidateInstanceOrigins(tabUrl) {
 
 async function findSalesforceSessionCookie(tabUrl, candidateOrigins) {
   for (const origin of candidateOrigins) {
+    const originHost = new URL(origin).hostname.toLowerCase();
+    if (!isTrustedApiHost(originHost)) {
+      continue;
+    }
     const cookie = await chrome.cookies.get({
       url: origin,
       name: "sid"
@@ -903,41 +958,12 @@ async function findSalesforceSessionCookie(tabUrl, candidateOrigins) {
     }
   }
 
-  // Fallback: search across all sid cookies and pick one that best matches the active Salesforce tab.
-  const sidCookies = await chrome.cookies.getAll({ name: "sid" });
-  if (!Array.isArray(sidCookies) || sidCookies.length === 0) {
-    return null;
-  }
-
-  const tabHost = tabUrl.hostname.toLowerCase();
-  const preferredDomainFromTab = derivePreferredApiHost(tabHost);
-
-  const scored = sidCookies
-    .filter((cookie) => cookie && cookie.domain && isSalesforceHost(cookie.domain.replace(/^\./, "")))
-    .map((cookie) => {
-      const domain = cookie.domain.replace(/^\./, "").toLowerCase();
-      let score = 0;
-      if (domain === tabHost) {
-        score += 4;
-      }
-      if (preferredDomainFromTab && domain === preferredDomainFromTab) {
-        score += 3;
-      }
-      if (tabHost.endsWith(domain)) {
-        score += 2;
-      }
-      if (domain.endsWith(".my.salesforce.com")) {
-        score += 1;
-      }
-      return { cookie, score };
-    })
-    .sort((a, b) => b.score - a.score);
-
-  return scored.length > 0 ? scored[0].cookie : null;
+  return null;
 }
 
 async function detectApiVersion(instanceUrl, accessToken) {
   try {
+    assertTrustedInstanceUrl(instanceUrl);
     const response = await fetch(`${instanceUrl}/services/data/`, {
       method: "GET",
       headers: {
@@ -1016,6 +1042,7 @@ function deriveEnvironmentFromUrl(instanceUrl) {
 }
 
 async function querySingleRecord(config, soql) {
+  assertTrustedInstanceUrl(config.instanceUrl);
   const queryPath = `/services/data/v${config.apiVersion}/query?q=${encodeURIComponent(soql)}`;
   const response = await fetch(`${config.instanceUrl}${queryPath}`, {
     method: "GET",
@@ -1038,12 +1065,29 @@ function isSalesforceHost(hostname) {
   return (
     host.endsWith(".salesforce.com") ||
     host.endsWith(".my.salesforce.com") ||
-    host.endsWith(".sandbox.my.salesforce.com") ||
-    host.endsWith(".force.com") ||
+    host.endsWith(".lightning.force.com") ||
     host === "salesforce-setup.com" ||
     host.endsWith(".salesforce-setup.com") ||
     host.endsWith(".my.salesforce-setup.com")
   );
+}
+
+function isTrustedApiHost(hostname) {
+  const host = String(hostname || "").toLowerCase();
+  return host.endsWith(".my.salesforce.com");
+}
+
+function assertTrustedInstanceUrl(instanceUrl) {
+  let parsedUrl;
+  try {
+    parsedUrl = new URL(instanceUrl);
+  } catch (_error) {
+    throw new Error("Invalid Salesforce instance URL.");
+  }
+
+  if (!isTrustedApiHost(parsedUrl.hostname)) {
+    throw new Error("Unsupported Salesforce domain. Open an org tab on *.my.salesforce.com and retry.");
+  }
 }
 
 function derivePreferredApiHost(hostname) {
@@ -1081,12 +1125,7 @@ async function getPreferredSalesforceTab() {
     return activeTab;
   }
 
-  const allTabs = await chrome.tabs.query({});
-  const salesforceTabs = allTabs
-    .filter((tab) => isSalesforceTab(tab))
-    .sort((a, b) => (b.lastAccessed || 0) - (a.lastAccessed || 0));
-
-  return salesforceTabs[0] || null;
+  return null;
 }
 
 async function getLaunchSourceSalesforceTab() {
@@ -1402,18 +1441,24 @@ function renderMethodDetails(items) {
   methodDetailsBodyEl.innerHTML = "";
 
   if (!items || items.length === 0) {
-    methodDetailsBodyEl.innerHTML =
-      "<tr><td colspan=\"2\">No method-level mapping found for this class.</td></tr>";
+    const tr = document.createElement("tr");
+    const td = document.createElement("td");
+    td.colSpan = 2;
+    td.textContent = "No method-level mapping found for this class.";
+    tr.appendChild(td);
+    methodDetailsBodyEl.appendChild(tr);
     return;
   }
 
   for (const item of items) {
     const testsText = item.tests.length > 0 ? item.tests.join(", ") : "No test mapping";
     const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td>${escapeHtml(item.methodName)}</td>
-      <td>${escapeHtml(testsText)}</td>
-    `;
+    const methodCell = document.createElement("td");
+    methodCell.textContent = item.methodName;
+    const testsCell = document.createElement("td");
+    testsCell.textContent = testsText;
+    tr.appendChild(methodCell);
+    tr.appendChild(testsCell);
     methodDetailsBodyEl.appendChild(tr);
   }
 }
@@ -1439,35 +1484,66 @@ function showTestClassesModal() {
     return;
   }
 
-  testClassesListEl.innerHTML = "";
+  testClassSearchEl.value = "";
+  renderTestClassesModalList("");
+  testModalEl.classList.remove("hidden");
+}
 
+function getFilteredTestClasses(searchTerm = "") {
   const excludePackages = excludePackagesEl.getAttribute("aria-pressed") === "true";
+  const normalizedSearchTerm = String(searchTerm || "").trim().toLowerCase();
   
   // Filter test classes based on exclude packages setting
-  const filteredTestClasses = testClasses.filter((testClass) => {
+  return testClasses.filter((testClass) => {
     if (excludePackages && testClass.NamespacePrefix && testClass.NamespacePrefix !== "-") {
       return false;
     }
-    return true;
+    if (!normalizedSearchTerm) {
+      return true;
+    }
+    return String(testClass.Name || "").toLowerCase().includes(normalizedSearchTerm);
   });
+}
 
-  const listHtml = filteredTestClasses.map((testClass) => `
-    <div class="test-class-item">
-      <label>
-        <input type="checkbox" class="test-class-checkbox" value="${escapeHtml(testClass.Id)}" data-name="${escapeHtml(testClass.Name)}" />
-        ${escapeHtml(testClass.Name)}
-        <span class="test-namespace">${escapeHtml(testClass.NamespacePrefix || "-")}</span>
-      </label>
-    </div>
-  `).join("");
+function renderTestClassesModalList(searchTerm = "") {
+  const selectedIds = new Set(
+    Array.from(testClassesListEl.querySelectorAll(".test-class-checkbox:checked")).map((checkbox) => checkbox.value)
+  );
+  const filteredTestClasses = getFilteredTestClasses(searchTerm);
+  testClassesListEl.innerHTML = "";
 
-  if (!listHtml) {
-    testClassesListEl.innerHTML = "<p style='text-align: center; color: #64748b;'>No test classes found.</p>";
-  } else {
-    testClassesListEl.innerHTML = listHtml;
+  if (filteredTestClasses.length === 0) {
+    const emptyMessage = document.createElement("p");
+    emptyMessage.style.textAlign = "center";
+    emptyMessage.style.color = "#64748b";
+    emptyMessage.textContent = "No test classes found.";
+    testClassesListEl.appendChild(emptyMessage);
+    return;
   }
 
-  testModalEl.classList.remove("hidden");
+  for (const testClass of filteredTestClasses) {
+    const item = document.createElement("div");
+    item.className = "test-class-item";
+
+    const label = document.createElement("label");
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.className = "test-class-checkbox";
+    checkbox.value = String(testClass.Id || "");
+    checkbox.setAttribute("data-name", String(testClass.Name || ""));
+    checkbox.checked = selectedIds.has(checkbox.value);
+
+    const nameText = document.createTextNode(String(testClass.Name || ""));
+    const namespace = document.createElement("span");
+    namespace.className = "test-namespace";
+    namespace.textContent = String(testClass.NamespacePrefix || "-");
+
+    label.appendChild(checkbox);
+    label.appendChild(nameText);
+    label.appendChild(namespace);
+    item.appendChild(label);
+    testClassesListEl.appendChild(item);
+  }
 }
 
 function closeTestModal() {
@@ -1521,6 +1597,7 @@ async function getClassCoverageDetails(classId) {
 }
 
 async function fetchApexClassSource(classId) {
+  assertTrustedInstanceUrl(currentConfig.instanceUrl);
   const classUrl =
     `${currentConfig.instanceUrl}/services/data/v${currentConfig.apiVersion}` +
     `/tooling/sobjects/ApexClass/${encodeURIComponent(classId)}`;
@@ -1701,6 +1778,15 @@ function setExecutionUiState(isRunning) {
   executeBtn.disabled = isRunning;
   selectAllBtn.disabled = isRunning;
   deselectAllBtn.disabled = isRunning;
+  abortAllTestsButtonEl.disabled = !isRunning;
+
+  if (!isRunning) {
+    activeExecutionConfig = null;
+    activeExecutionSelectedTestClasses = [];
+    activeLatestQueueByClass = new Map();
+    pendingAbortClassIds.clear();
+    inFlightAbortClassIds.clear();
+  }
 }
 
 function initializeTestExecutionTable(selectedTestClasses) {
@@ -1708,6 +1794,11 @@ function initializeTestExecutionTable(selectedTestClasses) {
   expandSectionExclusive("testExecution");
   testExecutionHelpEl.textContent =
     "Execution started. Tracking queue status for selected test classes...";
+  activeExecutionConfig = currentConfig;
+  activeExecutionSelectedTestClasses = selectedTestClasses.slice();
+  activeLatestQueueByClass = new Map();
+  pendingAbortClassIds.clear();
+  inFlightAbortClassIds.clear();
   renderExecutionProgressRows(selectedTestClasses, new Map(), true);
 }
 
@@ -1718,6 +1809,8 @@ async function monitorTestExecution({ config, selectedTestClasses, runIds, execu
   for (let attempt = 1; attempt <= maxPollAttempts; attempt += 1) {
     const queueItems = await fetchRelevantQueueItems(config, runIds, selectedClassIds, executionStartedAt);
     const latestQueueByClass = groupLatestQueueItemByClass(queueItems);
+    activeLatestQueueByClass = latestQueueByClass;
+    await flushPendingAbortRequests();
     const summary = summarizeQueueExecution(selectedTestClasses, latestQueueByClass);
 
     renderExecutionProgressRows(selectedTestClasses, latestQueueByClass, false);
@@ -1725,7 +1818,7 @@ async function monitorTestExecution({ config, selectedTestClasses, runIds, execu
       `Running: ${summary.running}, queued: ${summary.queued}, ` +
       `completed: ${summary.completed}/${summary.total}, failed: ${summary.failed}, aborted: ${summary.aborted}.`;
 
-    const statusType = summary.failed > 0 || summary.aborted > 0 ? "error" : "";
+    const statusType = summary.failed > 0 ? "error" : "";
     setStatus(
       `Test execution in progress (${summary.completed}/${summary.total} completed, ` +
       `${summary.running} running, ${summary.failed} failed).`,
@@ -1741,7 +1834,7 @@ async function monitorTestExecution({ config, selectedTestClasses, runIds, execu
       );
       renderExecutionFinalRows(selectedTestClasses, latestQueueByClass, failedResults);
 
-      const hasFailures = summary.failed > 0 || summary.aborted > 0 || failedResults.length > 0;
+      const hasFailures = summary.failed > 0 || failedResults.length > 0;
       const completionType = hasFailures ? "error" : "success";
       const completionText = hasFailures
         ? "Test execution completed with failures. Reloading coverage..."
@@ -1911,10 +2004,12 @@ function renderExecutionProgressRows(selectedTestClasses, latestQueueByClass, is
         : "Still waiting for queue item creation...";
 
     appendTestExecutionRow({
+      classId: testClass.id,
       className: testClass.name,
       failedMethod: "-",
       status,
-      errorMessage
+      errorMessage,
+      canAbort: canAbortQueueStatus(status)
     });
   }
 }
@@ -1928,10 +2023,12 @@ function renderExecutionFinalRows(selectedTestClasses, latestQueueByClass, faile
     const errorMessage = queueItem && queueItem.ExtendedStatus ? queueItem.ExtendedStatus : "-";
 
     appendTestExecutionRow({
+      classId: testClass.id,
       className: testClass.name,
       failedMethod: "-",
       status,
-      errorMessage
+      errorMessage,
+      canAbort: false
     });
   }
 
@@ -1960,7 +2057,8 @@ function renderExecutionFinalRows(selectedTestClasses, latestQueueByClass, faile
       className,
       failedMethod: methodName,
       status,
-      errorMessage: message
+      errorMessage: message,
+      canAbort: false
     });
   }
 
@@ -1968,15 +2066,43 @@ function renderExecutionFinalRows(selectedTestClasses, latestQueueByClass, faile
     "Execution finished with failures. Failed methods and error messages are listed below.";
 }
 
-function appendTestExecutionRow({ className, failedMethod, status, errorMessage }) {
+function appendTestExecutionRow({ classId, className, failedMethod, status, errorMessage, canAbort }) {
   const statusLabel = String(status || "Unknown");
   const tr = document.createElement("tr");
-  tr.innerHTML = `
-    <td>${escapeHtml(className || "UnknownClass")}</td>
-    <td>${escapeHtml(failedMethod || "-")}</td>
-    <td><span class="${getTestStatusClass(statusLabel)}">${escapeHtml(statusLabel)}</span></td>
-    <td class="test-error-cell">${escapeHtml(errorMessage || "-")}</td>
-  `;
+  const classCell = document.createElement("td");
+  classCell.textContent = className || "UnknownClass";
+
+  const methodCell = document.createElement("td");
+  methodCell.textContent = failedMethod || "-";
+
+  const statusCell = document.createElement("td");
+  const statusChip = document.createElement("span");
+  statusChip.className = getTestStatusClass(statusLabel);
+  statusChip.textContent = statusLabel;
+  statusCell.appendChild(statusChip);
+
+  const errorCell = document.createElement("td");
+  errorCell.className = "test-error-cell";
+  errorCell.textContent = errorMessage || "-";
+
+  const actionCell = document.createElement("td");
+  if (classId) {
+    const abortButton = document.createElement("button");
+    abortButton.type = "button";
+    abortButton.className = "secondary test-execution-action-btn";
+    abortButton.textContent = "Abort";
+    abortButton.setAttribute("data-class-id", String(classId));
+    abortButton.disabled = !canAbort || !isTestExecutionInProgress;
+    actionCell.appendChild(abortButton);
+  } else {
+    actionCell.textContent = "-";
+  }
+
+  tr.appendChild(classCell);
+  tr.appendChild(methodCell);
+  tr.appendChild(statusCell);
+  tr.appendChild(errorCell);
+  tr.appendChild(actionCell);
   testExecutionBodyEl.appendChild(tr);
 }
 
@@ -2008,6 +2134,91 @@ function getTestStatusClass(status) {
 
 function normalizeQueueStatus(status) {
   return String(status || "Queued").trim();
+}
+
+function canAbortQueueStatus(status) {
+  const normalized = normalizeQueueStatus(status);
+  return POLLING_TEST_QUEUE_STATUSES.has(normalized);
+}
+
+async function abortSingleTestClassById(classId) {
+  if (!isTestExecutionInProgress || !activeExecutionConfig || !classId) {
+    return;
+  }
+
+  pendingAbortClassIds.add(classId);
+  await flushPendingAbortRequests();
+}
+
+async function abortAllRunningTests() {
+  if (!isTestExecutionInProgress) {
+    return;
+  }
+
+  for (const testClass of activeExecutionSelectedTestClasses) {
+    pendingAbortClassIds.add(testClass.id);
+  }
+  setStatus("Abort requested for all running/queued test classes.", "");
+  await flushPendingAbortRequests();
+}
+
+async function flushPendingAbortRequests() {
+  if (!isTestExecutionInProgress || !activeExecutionConfig || pendingAbortClassIds.size === 0) {
+    return;
+  }
+
+  for (const classId of Array.from(pendingAbortClassIds)) {
+    if (inFlightAbortClassIds.has(classId)) {
+      continue;
+    }
+
+    const queueItem = activeLatestQueueByClass.get(classId);
+    if (!queueItem || !queueItem.Id) {
+      continue;
+    }
+
+    const status = normalizeQueueStatus(queueItem.Status);
+    if (!canAbortQueueStatus(status)) {
+      pendingAbortClassIds.delete(classId);
+      continue;
+    }
+
+    inFlightAbortClassIds.add(classId);
+    try {
+      await abortApexTestQueueItem(activeExecutionConfig, queueItem.Id);
+      pendingAbortClassIds.delete(classId);
+      setStatus(`Abort requested for test class "${queueItem.ApexClass?.Name || classId}".`, "");
+    } catch (error) {
+      setStatus(getErrorMessage(error), "error");
+    } finally {
+      inFlightAbortClassIds.delete(classId);
+    }
+  }
+}
+
+async function abortApexTestQueueItem(config, queueItemId) {
+  const response = await fetch(
+    `${config.instanceUrl}/services/data/v${config.apiVersion}/tooling/sobjects/ApexTestQueueItem/${encodeURIComponent(queueItemId)}`,
+    {
+      method: "PATCH",
+      headers: {
+        Authorization: `Bearer ${config.accessToken}`,
+        "Content-Type": "application/json",
+        Accept: "application/json"
+      },
+      body: JSON.stringify({
+        Status: "Aborted"
+      })
+    }
+  );
+
+  if (response.ok) {
+    return;
+  }
+
+  const payload = await parseJsonResponse(response);
+  const errorMessage = extractSalesforceError(payload, response.status);
+  throw new Error(`Failed to abort test execution: ${errorMessage}`);
 }
 
 async function fetchFailedMethodResults(config, runIds, classIds, executionStartedAt) {

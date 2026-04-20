@@ -140,6 +140,30 @@ button:disabled {
   cursor: not-allowed;
 }
 
+.button-loading {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.button-loading::before {
+  content: "";
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(255, 255, 255, 0.45);
+  border-top-color: #ffffff;
+  border-radius: 50%;
+  animation: button-spinner 0.7s linear infinite;
+}
+
+@keyframes button-spinner {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 button.secondary {
   background: linear-gradient(135deg, #e0e7ff 0%, #dde7f8 100%);
   color: #1e3a5f;
@@ -508,6 +532,17 @@ tbody tr:last-child td {
   color: #0f172a;
 }
 
+.test-execution-actions {
+  margin: 0 0 10px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.test-execution-action-btn {
+  padding: 6px 10px;
+  font-size: 12px;
+}
+
 .test-status {
   display: inline-block;
   padding: 4px 8px;
@@ -807,6 +842,11 @@ tbody tr:last-child td {
   flex: 1;
   min-height: 150px;
   background: #ffffff;
+}
+
+.test-class-search {
+  width: 100%;
+  margin-bottom: 10px;
 }
 
 .test-classes-list {
@@ -1172,6 +1212,12 @@ body.theme-dark .modal-close:hover {
 body.theme-dark .test-classes-list,
 body.theme-dark .test-class-item {
   background: #0f172a;
+  border-color: #334155;
+}
+
+body.theme-dark .test-class-search {
+  background: #0f172a;
+  color: #e5e7eb;
   border-color: #334155;
 }
 
