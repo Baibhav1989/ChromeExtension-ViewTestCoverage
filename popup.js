@@ -91,7 +91,6 @@ async function initialize() {
   excludePackagesEl.disabled = false; // Enable the exclude packages button by default
   applyTheme("light");
   await restoreConfig();
-  fillSessionFromActiveTab(); // Auto-load session on startup
   initializeSortingControls();
   initializeSectionToggleControls();
 
@@ -225,6 +224,12 @@ async function initialize() {
   // Disable export and execute buttons on initialization
   exportButton.disabled = true;
   executeTestsButton.disabled = true;
+
+  // On popup open, try importing session and auto-load coverage.
+  await fillSessionFromActiveTab();
+  if (form.instanceUrl.value && form.accessToken.value && form.apiVersion.value) {
+    await loadCoverage();
+  }
 }
 
 function setExtensionVersion() {
@@ -788,6 +793,8 @@ function setLoading(isLoading) {
   executeTestsButton.disabled = isLoading;
   includeMethodDetailsEl.disabled = isLoading;
   loadButton.textContent = isLoading ? "Loading..." : "Load Coverage";
+  loadButton.classList.toggle("button-loading", isLoading);
+  loadButton.setAttribute("aria-busy", isLoading ? "true" : "false");
 }
 
 function setStatus(message, type) {

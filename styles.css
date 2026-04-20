@@ -140,6 +140,30 @@ button:disabled {
   cursor: not-allowed;
 }
 
+.button-loading {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.button-loading::before {
+  content: "";
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(255, 255, 255, 0.45);
+  border-top-color: #ffffff;
+  border-radius: 50%;
+  animation: button-spinner 0.7s linear infinite;
+}
+
+@keyframes button-spinner {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 button.secondary {
   background: linear-gradient(135deg, #e0e7ff 0%, #dde7f8 100%);
   color: #1e3a5f;
