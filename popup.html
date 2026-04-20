@@ -231,6 +231,11 @@
           <p id="test-execution-help" class="muted">
             Select and execute test classes to track running status and failures.
           </p>
+          <div class="test-execution-actions">
+            <button id="abort-all-tests-button" type="button" class="secondary" disabled>
+              Abort All
+            </button>
+          </div>
           <div class="table-wrapper">
             <table>
               <thead>
@@ -239,6 +244,7 @@
                   <th>Failed Method</th>
                   <th>Status</th>
                   <th>Error</th>
+                  <th>Action</th>
                 </tr>
               </thead>
               <tbody id="test-execution-body"></tbody>

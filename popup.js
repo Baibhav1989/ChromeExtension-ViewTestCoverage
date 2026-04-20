@@ -39,6 +39,7 @@ const executeBtn = document.getElementById("execute-btn");
 const testExecutionResultsSectionEl = document.getElementById("test-execution-results");
 const testExecutionHelpEl = document.getElementById("test-execution-help");
 const testExecutionBodyEl = document.getElementById("test-execution-body");
+const abortAllTestsButtonEl = document.getElementById("abort-all-tests-button");
 const classListSectionEl = document.getElementById("class-list-section");
 const classListContentEl = document.getElementById("class-list-content");
 const classListToggleEl = document.getElementById("class-list-toggle");
@@ -70,6 +71,11 @@ let testClasses = [];
 let selectedClassId = null;
 let currentConfig = null;
 let isTestExecutionInProgress = false;
+let activeExecutionConfig = null;
+let activeExecutionSelectedTestClasses = [];
+let activeLatestQueueByClass = new Map();
+const pendingAbortClassIds = new Set();
+const inFlightAbortClassIds = new Set();
 const methodCoverageCache = new Map();
 const classCoverageCache = new Map();
 const sortState = {
@@ -190,6 +196,24 @@ async function initialize() {
 
   executeBtn.addEventListener("click", async () => {
     await executeSelectedTests();
+  });
+
+  abortAllTestsButtonEl.addEventListener("click", async () => {
+    await abortAllRunningTests();
+  });
+
+  testExecutionBodyEl.addEventListener("click", async (event) => {
+    const abortButton = event.target.closest(".test-execution-action-btn");
+    if (!abortButton) {
+      return;
+    }
+
+    const classId = abortButton.getAttribute("data-class-id");
+    if (!classId) {
+      return;
+    }
+
+    await abortSingleTestClassById(classId);
   });
 
   // Modal backdrop click handler
@@ -1815,6 +1839,15 @@ function setExecutionUiState(isRunning) {
   executeBtn.disabled = isRunning;
   selectAllBtn.disabled = isRunning;
   deselectAllBtn.disabled = isRunning;
+  abortAllTestsButtonEl.disabled = !isRunning;
+
+  if (!isRunning) {
+    activeExecutionConfig = null;
+    activeExecutionSelectedTestClasses = [];
+    activeLatestQueueByClass = new Map();
+    pendingAbortClassIds.clear();
+    inFlightAbortClassIds.clear();
+  }
 }
 
 function initializeTestExecutionTable(selectedTestClasses) {
@@ -1822,6 +1855,11 @@ function initializeTestExecutionTable(selectedTestClasses) {
   expandSectionExclusive("testExecution");
   testExecutionHelpEl.textContent =
     "Execution started. Tracking queue status for selected test classes...";
+  activeExecutionConfig = currentConfig;
+  activeExecutionSelectedTestClasses = selectedTestClasses.slice();
+  activeLatestQueueByClass = new Map();
+  pendingAbortClassIds.clear();
+  inFlightAbortClassIds.clear();
   renderExecutionProgressRows(selectedTestClasses, new Map(), true);
 }
 
@@ -1832,6 +1870,8 @@ async function monitorTestExecution({ config, selectedTestClasses, runIds, execu
   for (let attempt = 1; attempt <= maxPollAttempts; attempt += 1) {
     const queueItems = await fetchRelevantQueueItems(config, runIds, selectedClassIds, executionStartedAt);
     const latestQueueByClass = groupLatestQueueItemByClass(queueItems);
+    activeLatestQueueByClass = latestQueueByClass;
+    await flushPendingAbortRequests();
     const summary = summarizeQueueExecution(selectedTestClasses, latestQueueByClass);
 
     renderExecutionProgressRows(selectedTestClasses, latestQueueByClass, false);
@@ -2025,10 +2065,12 @@ function renderExecutionProgressRows(selectedTestClasses, latestQueueByClass, is
         : "Still waiting for queue item creation...";
 
     appendTestExecutionRow({
+      classId: testClass.id,
       className: testClass.name,
       failedMethod: "-",
       status,
-      errorMessage
+      errorMessage,
+      canAbort: canAbortQueueStatus(status)
     });
   }
 }
@@ -2042,10 +2084,12 @@ function renderExecutionFinalRows(selectedTestClasses, latestQueueByClass, faile
     const errorMessage = queueItem && queueItem.ExtendedStatus ? queueItem.ExtendedStatus : "-";
 
     appendTestExecutionRow({
+      classId: testClass.id,
       className: testClass.name,
       failedMethod: "-",
       status,
-      errorMessage
+      errorMessage,
+      canAbort: false
     });
   }
 
@@ -2074,7 +2118,8 @@ function renderExecutionFinalRows(selectedTestClasses, latestQueueByClass, faile
       className,
       failedMethod: methodName,
       status,
-      errorMessage: message
+      errorMessage: message,
+      canAbort: false
     });
   }
 
@@ -2082,7 +2127,7 @@ function renderExecutionFinalRows(selectedTestClasses, latestQueueByClass, faile
     "Execution finished with failures. Failed methods and error messages are listed below.";
 }
 
-function appendTestExecutionRow({ className, failedMethod, status, errorMessage }) {
+function appendTestExecutionRow({ classId, className, failedMethod, status, errorMessage, canAbort }) {
   const statusLabel = String(status || "Unknown");
   const tr = document.createElement("tr");
   const classCell = document.createElement("td");
@@ -2101,10 +2146,24 @@ function appendTestExecutionRow({ className, failedMethod, status, errorMessage 
   errorCell.className = "test-error-cell";
   errorCell.textContent = errorMessage || "-";
 
+  const actionCell = document.createElement("td");
+  if (classId) {
+    const abortButton = document.createElement("button");
+    abortButton.type = "button";
+    abortButton.className = "secondary test-execution-action-btn";
+    abortButton.textContent = "Abort";
+    abortButton.setAttribute("data-class-id", String(classId));
+    abortButton.disabled = !canAbort || !isTestExecutionInProgress;
+    actionCell.appendChild(abortButton);
+  } else {
+    actionCell.textContent = "-";
+  }
+
   tr.appendChild(classCell);
   tr.appendChild(methodCell);
   tr.appendChild(statusCell);
   tr.appendChild(errorCell);
+  tr.appendChild(actionCell);
   testExecutionBodyEl.appendChild(tr);
 }
 
@@ -2136,6 +2195,91 @@ function getTestStatusClass(status) {
 
 function normalizeQueueStatus(status) {
   return String(status || "Queued").trim();
+}
+
+function canAbortQueueStatus(status) {
+  const normalized = normalizeQueueStatus(status);
+  return POLLING_TEST_QUEUE_STATUSES.has(normalized);
+}
+
+async function abortSingleTestClassById(classId) {
+  if (!isTestExecutionInProgress || !activeExecutionConfig || !classId) {
+    return;
+  }
+
+  pendingAbortClassIds.add(classId);
+  await flushPendingAbortRequests();
+}
+
+async function abortAllRunningTests() {
+  if (!isTestExecutionInProgress) {
+    return;
+  }
+
+  for (const testClass of activeExecutionSelectedTestClasses) {
+    pendingAbortClassIds.add(testClass.id);
+  }
+  setStatus("Abort requested for all running/queued test classes.", "");
+  await flushPendingAbortRequests();
+}
+
+async function flushPendingAbortRequests() {
+  if (!isTestExecutionInProgress || !activeExecutionConfig || pendingAbortClassIds.size === 0) {
+    return;
+  }
+
+  for (const classId of Array.from(pendingAbortClassIds)) {
+    if (inFlightAbortClassIds.has(classId)) {
+      continue;
+    }
+
+    const queueItem = activeLatestQueueByClass.get(classId);
+    if (!queueItem || !queueItem.Id) {
+      continue;
+    }
+
+    const status = normalizeQueueStatus(queueItem.Status);
+    if (!canAbortQueueStatus(status)) {
+      pendingAbortClassIds.delete(classId);
+      continue;
+    }
+
+    inFlightAbortClassIds.add(classId);
+    try {
+      await abortApexTestQueueItem(activeExecutionConfig, queueItem.Id);
+      pendingAbortClassIds.delete(classId);
+      setStatus(`Abort requested for test class "${queueItem.ApexClass?.Name || classId}".`, "");
+    } catch (error) {
+      setStatus(getErrorMessage(error), "error");
+    } finally {
+      inFlightAbortClassIds.delete(classId);
+    }
+  }
+}
+
+async function abortApexTestQueueItem(config, queueItemId) {
+  const response = await fetch(
+    `${config.instanceUrl}/services/data/v${config.apiVersion}/tooling/sobjects/ApexTestQueueItem/${encodeURIComponent(queueItemId)}`,
+    {
+      method: "PATCH",
+      headers: {
+        Authorization: `Bearer ${config.accessToken}`,
+        "Content-Type": "application/json",
+        Accept: "application/json"
+      },
+      body: JSON.stringify({
+        Status: "Aborted"
+      })
+    }
+  );
+
+  if (response.ok) {
+    return;
+  }
+
+  const payload = await parseJsonResponse(response);
+  const errorMessage = extractSalesforceError(payload, response.status);
+  throw new Error(`Failed to abort test execution: ${errorMessage}`);
 }
 
 async function fetchFailedMethodResults(config, runIds, classIds, executionStartedAt) {
