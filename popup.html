@@ -284,6 +284,25 @@
       </div>
     </div>
 
+    <!-- Salesforce Permission Consent Modal -->
+    <div id="org-consent-modal" class="modal hidden">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2>Salesforce Permission Request</h2>
+        </div>
+        <div class="modal-body">
+          <p class="muted">
+            Allow this extension to access your Salesforce session for this org?
+          </p>
+          <p><strong id="org-consent-host">-</strong></p>
+        </div>
+        <div class="modal-footer">
+          <button id="org-consent-deny" type="button" class="secondary">Deny</button>
+          <button id="org-consent-allow" type="button">Allow</button>
+        </div>
+      </div>
+    </div>
+
     <footer class="extension-footer">
       <div class="footer-content">
         <span class="footer-text">Apex Coverage Viewer</span>

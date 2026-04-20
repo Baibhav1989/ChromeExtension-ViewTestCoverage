@@ -51,6 +51,10 @@ const classCoverageSummaryEl = document.getElementById("class-coverage-summary")
 const classCoverageBodyEl = document.getElementById("class-coverage-body");
 const classCoverageCloseBtn = document.getElementById("class-coverage-close");
 const classCoverageDoneBtn = document.getElementById("class-coverage-done");
+const orgConsentModalEl = document.getElementById("org-consent-modal");
+const orgConsentHostEl = document.getElementById("org-consent-host");
+const orgConsentAllowBtn = document.getElementById("org-consent-allow");
+const orgConsentDenyBtn = document.getElementById("org-consent-deny");
 const sortHeaderButtons = Array.from(document.querySelectorAll(".sort-header"));
 const sfUserNameEl = document.getElementById("sf-user-name");
 const sfEnvNameEl = document.getElementById("sf-env-name");
@@ -73,7 +77,9 @@ const sortState = {
 };
 
 const STORAGE_KEY = "apexCoverageConfig";
+const ORG_CONSENT_STORAGE_KEY = "salesforceOrgConsent";
 const launchSourceTabId = parseLaunchSourceTabId();
+let orgConsentPendingResolver = null;
 
 initialize();
 
@@ -156,6 +162,14 @@ async function initialize() {
     closeClassCoverageModal();
   });
 
+  orgConsentAllowBtn.addEventListener("click", () => {
+    resolveOrgConsentDecision(true);
+  });
+
+  orgConsentDenyBtn.addEventListener("click", () => {
+    resolveOrgConsentDecision(false);
+  });
+
   // Test class selection
   selectAllBtn.addEventListener("click", () => {
     document.querySelectorAll(".test-class-checkbox").forEach(checkbox => {
@@ -183,6 +197,12 @@ async function initialize() {
   classCoverageModalEl.addEventListener("click", (event) => {
     if (event.target === classCoverageModalEl) {
       closeClassCoverageModal();
+    }
+  });
+
+  orgConsentModalEl.addEventListener("click", (event) => {
+    if (event.target === orgConsentModalEl) {
+      resolveOrgConsentDecision(false);
     }
   });
 
@@ -833,6 +853,7 @@ async function fillSessionFromActiveTab() {
 
     const resolvedInstanceUrl = candidateOrigins[0] || tabUrl.origin;
     assertTrustedInstanceUrl(resolvedInstanceUrl);
+    await ensureOrgAccessConsent(resolvedInstanceUrl);
     form.instanceUrl.value = resolvedInstanceUrl;
     form.accessToken.value = sidCookie.value;
 
@@ -1002,6 +1023,53 @@ function deriveEnvironmentFromUrl(instanceUrl) {
     return host;
   } catch (_error) {
     return "Unknown environment";
+  }
+}
+
+async function ensureOrgAccessConsent(instanceUrl) {
+  const instanceHost = new URL(instanceUrl).hostname.toLowerCase();
+  const consentMap = await getStoredOrgConsentMap();
+  if (consentMap[instanceHost] === true) {
+    return;
+  }
+
+  const userAllowed = await requestOrgAccessConsent(instanceHost);
+  if (!userAllowed) {
+    throw new Error("Salesforce permission denied by user.");
+  }
+
+  consentMap[instanceHost] = true;
+  await chrome.storage.local.set({ [ORG_CONSENT_STORAGE_KEY]: consentMap });
+}
+
+async function getStoredOrgConsentMap() {
+  const stored = await chrome.storage.local.get(ORG_CONSENT_STORAGE_KEY);
+  const value = stored[ORG_CONSENT_STORAGE_KEY];
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {};
+  }
+  return value;
+}
+
+function requestOrgAccessConsent(instanceHost) {
+  if (!orgConsentModalEl || !orgConsentHostEl) {
+    return Promise.resolve(false);
+  }
+
+  orgConsentHostEl.textContent = instanceHost;
+  orgConsentModalEl.classList.remove("hidden");
+
+  return new Promise((resolve) => {
+    orgConsentPendingResolver = resolve;
+  });
+}
+
+function resolveOrgConsentDecision(allowed) {
+  orgConsentModalEl.classList.add("hidden");
+  if (orgConsentPendingResolver) {
+    const resolver = orgConsentPendingResolver;
+    orgConsentPendingResolver = null;
+    resolver(Boolean(allowed));
   }
 }
 
