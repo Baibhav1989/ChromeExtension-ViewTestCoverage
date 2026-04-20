@@ -54,6 +54,7 @@ const classCoverageDoneBtn = document.getElementById("class-coverage-done");
 const sortHeaderButtons = Array.from(document.querySelectorAll(".sort-header"));
 const sfUserNameEl = document.getElementById("sf-user-name");
 const sfEnvNameEl = document.getElementById("sf-env-name");
+const extensionVersionEl = document.getElementById("extension-version");
 
 const TERMINAL_TEST_QUEUE_STATUSES = new Set(["Completed", "Failed", "Aborted"]);
 const POLLING_TEST_QUEUE_STATUSES = new Set(["Queued", "Preparing", "Holding", "Processing"]);
@@ -77,6 +78,7 @@ const launchSourceTabId = parseLaunchSourceTabId();
 initialize();
 
 async function initialize() {
+  setExtensionVersion();
   // Default: hide managed-package classes unless user changes it.
   excludePackagesEl.setAttribute("aria-pressed", "true");
   excludePackagesEl.disabled = false; // Enable the exclude packages button by default
@@ -194,6 +196,15 @@ async function initialize() {
   // Disable export and execute buttons on initialization
   exportButton.disabled = true;
   executeTestsButton.disabled = true;
+}
+
+function setExtensionVersion() {
+  if (!extensionVersionEl) {
+    return;
+  }
+
+  const manifestVersion = chrome.runtime.getManifest().version;
+  extensionVersionEl.textContent = manifestVersion ? `v${manifestVersion}` : "v-";
 }
 
 function toggleMethodDetailsView() {
