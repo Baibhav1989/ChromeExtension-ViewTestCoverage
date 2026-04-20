@@ -29,6 +29,7 @@ const methodDetailsTitleEl = document.getElementById("method-details-title");
 const methodDetailsHelpEl = document.getElementById("method-details-help");
 const methodDetailsBodyEl = document.getElementById("method-details-body");
 const testModalEl = document.getElementById("test-modal");
+const testClassSearchEl = document.getElementById("test-class-search");
 const testClassesListEl = document.getElementById("test-classes-list");
 const modalCloseBtn = document.getElementById("modal-close");
 const modalCancelBtn = document.getElementById("modal-cancel");
@@ -143,6 +144,10 @@ async function initialize() {
   // Test execution
   executeTestsButton.addEventListener("click", () => {
     showTestClassesModal();
+  });
+
+  testClassSearchEl.addEventListener("input", () => {
+    renderTestClassesModalList(testClassSearchEl.value);
   });
 
   // Modal controls
@@ -1516,17 +1521,33 @@ function showTestClassesModal() {
     return;
   }
 
-  testClassesListEl.innerHTML = "";
+  testClassSearchEl.value = "";
+  renderTestClassesModalList("");
+  testModalEl.classList.remove("hidden");
+}
 
+function getFilteredTestClasses(searchTerm = "") {
   const excludePackages = excludePackagesEl.getAttribute("aria-pressed") === "true";
+  const normalizedSearchTerm = String(searchTerm || "").trim().toLowerCase();
   
   // Filter test classes based on exclude packages setting
-  const filteredTestClasses = testClasses.filter((testClass) => {
+  return testClasses.filter((testClass) => {
     if (excludePackages && testClass.NamespacePrefix && testClass.NamespacePrefix !== "-") {
       return false;
     }
-    return true;
+    if (!normalizedSearchTerm) {
+      return true;
+    }
+    return String(testClass.Name || "").toLowerCase().includes(normalizedSearchTerm);
   });
+}
+
+function renderTestClassesModalList(searchTerm = "") {
+  const selectedIds = new Set(
+    Array.from(testClassesListEl.querySelectorAll(".test-class-checkbox:checked")).map((checkbox) => checkbox.value)
+  );
+  const filteredTestClasses = getFilteredTestClasses(searchTerm);
+  testClassesListEl.innerHTML = "";
 
   if (filteredTestClasses.length === 0) {
     const emptyMessage = document.createElement("p");
@@ -1534,32 +1555,32 @@ function showTestClassesModal() {
     emptyMessage.style.color = "#64748b";
     emptyMessage.textContent = "No test classes found.";
     testClassesListEl.appendChild(emptyMessage);
-  } else {
-    for (const testClass of filteredTestClasses) {
-      const item = document.createElement("div");
-      item.className = "test-class-item";
-
-      const label = document.createElement("label");
-      const checkbox = document.createElement("input");
-      checkbox.type = "checkbox";
-      checkbox.className = "test-class-checkbox";
-      checkbox.value = String(testClass.Id || "");
-      checkbox.setAttribute("data-name", String(testClass.Name || ""));
-
-      const nameText = document.createTextNode(String(testClass.Name || ""));
-      const namespace = document.createElement("span");
-      namespace.className = "test-namespace";
-      namespace.textContent = String(testClass.NamespacePrefix || "-");
-
-      label.appendChild(checkbox);
-      label.appendChild(nameText);
-      label.appendChild(namespace);
-      item.appendChild(label);
-      testClassesListEl.appendChild(item);
-    }
+    return;
   }
 
-  testModalEl.classList.remove("hidden");
+  for (const testClass of filteredTestClasses) {
+    const item = document.createElement("div");
+    item.className = "test-class-item";
+
+    const label = document.createElement("label");
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.className = "test-class-checkbox";
+    checkbox.value = String(testClass.Id || "");
+    checkbox.setAttribute("data-name", String(testClass.Name || ""));
+    checkbox.checked = selectedIds.has(checkbox.value);
+
+    const nameText = document.createTextNode(String(testClass.Name || ""));
+    const namespace = document.createElement("span");
+    namespace.className = "test-namespace";
+    namespace.textContent = String(testClass.NamespacePrefix || "-");
+
+    label.appendChild(checkbox);
+    label.appendChild(nameText);
+    label.appendChild(namespace);
+    item.appendChild(label);
+    testClassesListEl.appendChild(item);
+  }
 }
 
 function closeTestModal() {

@@ -809,6 +809,11 @@ tbody tr:last-child td {
   background: #ffffff;
 }
 
+.test-class-search {
+  width: 100%;
+  margin-bottom: 10px;
+}
+
 .test-classes-list {
   max-height: 300px;
   overflow-y: auto;
@@ -1172,6 +1177,12 @@ body.theme-dark .modal-close:hover {
 body.theme-dark .test-classes-list,
 body.theme-dark .test-class-item {
   background: #0f172a;
+  border-color: #334155;
+}
+
+body.theme-dark .test-class-search {
+  background: #0f172a;
+  color: #e5e7eb;
   border-color: #334155;
 }
 
