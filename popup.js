@@ -1097,6 +1097,7 @@ function isSalesforceHost(hostname) {
   return (
     host.endsWith(".salesforce.com") ||
     host.endsWith(".my.salesforce.com") ||
+    host.endsWith(".lightning.force.com") ||
     host === "salesforce-setup.com" ||
     host.endsWith(".salesforce-setup.com") ||
     host.endsWith(".my.salesforce-setup.com")
