@@ -1811,7 +1811,7 @@ async function monitorTestExecution({ config, selectedTestClasses, runIds, execu
       `Running: ${summary.running}, queued: ${summary.queued}, ` +
       `completed: ${summary.completed}/${summary.total}, failed: ${summary.failed}, aborted: ${summary.aborted}.`;
 
-    const statusType = summary.failed > 0 || summary.aborted > 0 ? "error" : "";
+    const statusType = summary.failed > 0 ? "error" : "";
     setStatus(
       `Test execution in progress (${summary.completed}/${summary.total} completed, ` +
       `${summary.running} running, ${summary.failed} failed).`,
@@ -1827,7 +1827,7 @@ async function monitorTestExecution({ config, selectedTestClasses, runIds, execu
       );
       renderExecutionFinalRows(selectedTestClasses, latestQueueByClass, failedResults);
 
-      const hasFailures = summary.failed > 0 || summary.aborted > 0 || failedResults.length > 0;
+      const hasFailures = summary.failed > 0 || failedResults.length > 0;
       const completionType = hasFailures ? "error" : "success";
       const completionText = hasFailures
         ? "Test execution completed with failures. Reloading coverage..."
