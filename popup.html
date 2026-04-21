@@ -57,16 +57,40 @@
             style="display: none;"
           />
 
-          <div class="toggle-view">
-            <label for="include-method-details">Method-wise view</label>
-            <button id="include-method-details" name="includeMethodDetails" type="button" class="toggle-btn" aria-pressed="false">
+          <div class="toggle-view toggle-view--with-hint">
+            <div class="toggle-view-label">
+              <label for="include-method-details">Method-wise view</label>
+              <p id="include-method-details-hint" class="muted toggle-hint">
+                When on, the Method Coverage section is shown; click a class row to see each method and which tests cover it.
+              </p>
+            </div>
+            <button
+              id="include-method-details"
+              name="includeMethodDetails"
+              type="button"
+              class="toggle-btn"
+              aria-pressed="false"
+              aria-describedby="include-method-details-hint"
+            >
               <span class="toggle-slider"></span>
             </button>
           </div>
 
-          <div class="toggle-view">
-            <label for="exclude-packages">Exclude package classes</label>
-            <button id="exclude-packages" name="excludePackages" type="button" class="toggle-btn" aria-pressed="true">
+          <div class="toggle-view toggle-view--with-hint">
+            <div class="toggle-view-label">
+              <label for="exclude-packages">Exclude package classes</label>
+              <p id="exclude-packages-hint" class="muted toggle-hint">
+                When on, Apex classes from managed packages (namespaced) are omitted from the class list and coverage.
+              </p>
+            </div>
+            <button
+              id="exclude-packages"
+              name="excludePackages"
+              type="button"
+              class="toggle-btn"
+              aria-pressed="false"
+              aria-describedby="exclude-packages-hint"
+            >
               <span class="toggle-slider"></span>
             </button>
           </div>

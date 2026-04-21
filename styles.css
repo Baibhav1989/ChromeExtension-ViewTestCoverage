@@ -607,12 +607,30 @@ tbody tr:last-child td {
   border-bottom: none;
 }
 
+.toggle-view--with-hint {
+  align-items: flex-start;
+}
+
+.toggle-view--with-hint .toggle-btn {
+  margin-top: 2px;
+}
+
+.toggle-view-label {
+  flex: 1;
+  min-width: 0;
+}
+
 .toggle-view label {
   margin: 0;
   font-size: 14px;
   color: #374151;
   font-weight: 500;
-  flex: 1;
+}
+
+.toggle-view .toggle-hint {
+  margin: 4px 0 0;
+  font-size: 11px;
+  line-height: 1.35;
 }
 
 .toggle-btn {

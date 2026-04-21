@@ -86,11 +86,11 @@ initialize();
 
 async function initialize() {
   setExtensionVersion();
-  // Default: hide managed-package classes unless user changes it.
-  excludePackagesEl.setAttribute("aria-pressed", "true");
-  excludePackagesEl.disabled = false; // Enable the exclude packages button by default
+  excludePackagesEl.disabled = false;
   applyTheme("light");
   await restoreConfig();
+  // Not persisted: always off when the popup opens (package classes visible).
+  excludePackagesEl.setAttribute("aria-pressed", "false");
   initializeSortingControls();
   initializeSectionToggleControls();
 
@@ -324,7 +324,6 @@ function getCurrentTheme() {
 function persistUiPreferences() {
   const preferences = {
     includeMethodDetails: includeMethodDetailsEl.getAttribute("aria-pressed") === "true",
-    excludePackages: excludePackagesEl.getAttribute("aria-pressed") === "true",
     theme: getCurrentTheme()
   };
   persistConfig(preferences).catch(() => {
@@ -448,7 +447,6 @@ async function restoreConfig() {
   const config = stored[STORAGE_KEY];
 
   if (!config) {
-    excludePackagesEl.setAttribute("aria-pressed", "true");
     applyTheme("light");
     return;
   }
@@ -457,14 +455,12 @@ async function restoreConfig() {
     "aria-pressed",
     config.includeMethodDetails ?? false
   );
-  excludePackagesEl.setAttribute("aria-pressed", config.excludePackages ?? true);
   applyTheme(config.theme === "dark" ? "dark" : "light");
 }
 
 async function persistConfig(config) {
   const preferences = {
     includeMethodDetails: Boolean(config.includeMethodDetails),
-    excludePackages: config.excludePackages ?? true,
     theme: config.theme === "dark" ? "dark" : getCurrentTheme()
   };
   await chrome.storage.local.set({ [STORAGE_KEY]: preferences });
