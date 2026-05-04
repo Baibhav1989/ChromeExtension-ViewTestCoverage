@@ -15,6 +15,17 @@
           <span class="header-item"><span class="header-label">Environment:</span> <span id="sf-env-name">Not connected</span></span>
         </div>
         <div class="header-right">
+          <button
+            id="ai-settings-button"
+            type="button"
+            class="ai-settings-button"
+            aria-label="Open AI test generation settings"
+            title="AI Test Generation Settings"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="M19.14 12.94a7.94 7.94 0 0 0 .05-.94 7.94 7.94 0 0 0-.05-.94l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.61-.22l-2.39.96a7.7 7.7 0 0 0-1.62-.94l-.36-2.54a.5.5 0 0 0-.5-.42h-3.84a.5.5 0 0 0-.5.42l-.36 2.54a7.7 7.7 0 0 0-1.62.94l-2.39-.96a.5.5 0 0 0-.61.22L2.66 8.84a.5.5 0 0 0 .12.64l2.03 1.58a7.94 7.94 0 0 0 0 1.88l-2.03 1.58a.5.5 0 0 0-.12.64l1.92 3.32a.5.5 0 0 0 .61.22l2.39-.96a7.7 7.7 0 0 0 1.62.94l.36 2.54a.5.5 0 0 0 .5.42h3.84a.5.5 0 0 0 .5-.42l.36-2.54a7.7 7.7 0 0 0 1.62-.94l2.39.96a.5.5 0 0 0 .61-.22l1.92-3.32a.5.5 0 0 0-.12-.64l-2.03-1.58zM12 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7z"></path>
+            </svg>
+          </button>
           <label for="theme-select" class="header-label">Theme</label>
           <select id="theme-select" class="theme-select" aria-label="Select extension theme">
             <option value="light">Light</option>
@@ -102,6 +113,9 @@
             <button id="load-button" type="submit">Load Coverage</button>
             <button id="execute-tests-button" type="button" class="secondary hidden">
               Execute Test Classes
+            </button>
+            <button id="generate-ai-test-button" type="button" class="secondary hidden" disabled>
+              Generate Test (AI)
             </button>
             <button id="export-button" type="button" class="secondary hidden">
               Export CSV
@@ -300,6 +314,197 @@
           <button id="deselect-all-btn" type="button" class="secondary">Deselect All</button>
           <button id="execute-btn" type="button">Execute Selected</button>
           <button id="modal-cancel" type="button" class="secondary">Cancel</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- AI Class Picker Modal -->
+    <div id="ai-class-picker-modal" class="modal hidden">
+      <div class="modal-content ai-class-picker-modal-content">
+        <div class="modal-header">
+          <h2>Select a Class to Test</h2>
+          <button id="ai-class-picker-close" type="button" class="modal-close">&times;</button>
+        </div>
+        <div class="modal-body">
+          <p class="muted">
+            Pick the Apex class you want to generate a test for. You can search by name and sort by coverage to focus on low-coverage classes.
+          </p>
+          <div class="ai-class-picker-controls">
+            <input
+              id="ai-class-picker-search"
+              class="test-class-search"
+              type="text"
+              placeholder="Search classes by name..."
+              aria-label="Search Apex classes"
+            />
+            <label class="ai-toggle-label">
+              <input id="ai-class-picker-low-only" type="checkbox" />
+              Show only classes below 75%
+            </label>
+          </div>
+          <div id="ai-class-picker-list" class="ai-class-picker-list"></div>
+        </div>
+        <div class="modal-footer">
+          <button id="ai-class-picker-cancel" type="button" class="secondary">Cancel</button>
+          <button id="ai-class-picker-continue" type="button" disabled>Continue</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- AI Settings Modal -->
+    <div id="ai-settings-modal" class="modal hidden">
+      <div class="modal-content ai-settings-modal-content">
+        <div class="modal-header">
+          <h2>AI Test Generation Settings</h2>
+          <button id="ai-settings-close" type="button" class="modal-close">&times;</button>
+        </div>
+        <div class="modal-body ai-settings-body">
+          <p class="muted">
+            Choose which AI provider should generate Apex test classes. Settings are stored locally in your browser.
+          </p>
+
+          <div class="ai-form-group">
+            <label for="ai-provider-select">Provider</label>
+            <select id="ai-provider-select" class="ai-input">
+              <option value="salesforce_llm">Salesforce Einstein LLM Generations (org-managed)</option>
+              <option value="salesforce_models">Salesforce Models REST API (org-managed)</option>
+              <option value="agentforce">Agentforce Agent (org-managed)</option>
+              <option value="openai">OpenAI (BYO API key)</option>
+              <option value="anthropic">Anthropic Claude (BYO API key)</option>
+            </select>
+            <p class="muted ai-help">
+              Salesforce options reuse your active Salesforce session and require Einstein/Agentforce to be enabled in the org.
+              BYO options call the provider directly from this extension using a key you supply.
+            </p>
+          </div>
+
+          <div id="ai-model-group" class="ai-form-group">
+            <label for="ai-model-input">Model name</label>
+            <input
+              id="ai-model-input"
+              class="ai-input"
+              type="text"
+              placeholder="e.g. sfdc_ai__DefaultGPT4Omni / gpt-4o-mini / claude-sonnet-4-5"
+            />
+          </div>
+
+          <div id="ai-agent-group" class="ai-form-group hidden">
+            <label for="ai-agent-id-input">Agentforce Agent ID</label>
+            <input
+              id="ai-agent-id-input"
+              class="ai-input"
+              type="text"
+              placeholder="0XxXXXXXXXXXXXXXXX"
+            />
+            <p class="muted ai-help">
+              Find the Agent ID in Setup → Agents. The agent must accept user prompts and return Apex code in its reply.
+            </p>
+          </div>
+
+          <div id="ai-api-key-group" class="ai-form-group hidden">
+            <label for="ai-api-key-input">API key</label>
+            <input
+              id="ai-api-key-input"
+              class="ai-input"
+              type="password"
+              placeholder="sk-... or claude key"
+              autocomplete="off"
+            />
+            <p class="muted ai-help">
+              Stored only on this device via <code>chrome.storage.local</code>. Never sent to Salesforce.
+            </p>
+          </div>
+
+          <div class="ai-form-group">
+            <label for="ai-endpoint-input">Custom endpoint (optional)</label>
+            <input
+              id="ai-endpoint-input"
+              class="ai-input"
+              type="text"
+              placeholder="Override path or URL if your org uses a non-default endpoint"
+            />
+            <p class="muted ai-help">
+              For Salesforce providers this is a relative path appended to the instance URL.
+              For OpenAI/Anthropic this is a full URL (defaults to the standard chat/completions endpoints).
+            </p>
+          </div>
+
+          <div class="ai-form-group">
+            <label class="ai-toggle-label">
+              <input id="ai-auto-run-toggle" type="checkbox" />
+              Ask to run new/updated tests after saving
+            </label>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button id="ai-settings-test" type="button" class="secondary">Test Connection</button>
+          <button id="ai-settings-cancel" type="button" class="secondary">Cancel</button>
+          <button id="ai-settings-save" type="button">Save Settings</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- AI Test Generator Modal -->
+    <div id="ai-generator-modal" class="modal hidden">
+      <div class="modal-content ai-generator-modal-content">
+        <div class="modal-header">
+          <h2 id="ai-generator-title">Generate Apex Test</h2>
+          <button id="ai-generator-close" type="button" class="modal-close">&times;</button>
+        </div>
+        <div class="modal-body ai-generator-body">
+          <div id="ai-generator-summary" class="muted">
+            Loading class context...
+          </div>
+
+          <div class="ai-form-row">
+            <div class="ai-form-group">
+              <label for="ai-save-mode-select">Save mode</label>
+              <select id="ai-save-mode-select" class="ai-input">
+                <option value="new">Create new test class</option>
+                <option value="append">Append into existing test class</option>
+              </select>
+            </div>
+            <div id="ai-new-class-group" class="ai-form-group">
+              <label for="ai-new-class-name-input">New test class name</label>
+              <input
+                id="ai-new-class-name-input"
+                class="ai-input"
+                type="text"
+                placeholder="e.g. MyClassTest"
+              />
+            </div>
+            <div id="ai-existing-class-group" class="ai-form-group hidden">
+              <label for="ai-existing-class-select">Target test class</label>
+              <select id="ai-existing-class-select" class="ai-input"></select>
+            </div>
+          </div>
+
+          <div class="ai-form-group">
+            <label for="ai-hints-input">Optional hints for the AI</label>
+            <textarea
+              id="ai-hints-input"
+              class="ai-input ai-textarea"
+              placeholder="Examples: 'Cover the bulk update path with 200 records', 'Add @TestSetup', 'Mock CalloutMock for HTTP calls'..."
+              rows="3"
+            ></textarea>
+          </div>
+
+          <div id="ai-uncovered-summary" class="ai-uncovered hidden"></div>
+
+          <div class="ai-generator-actions">
+            <button id="ai-generate-button" type="button">Generate</button>
+            <button id="ai-regenerate-button" type="button" class="secondary hidden">Regenerate</button>
+            <span id="ai-generator-status" class="muted"></span>
+          </div>
+
+          <div id="ai-output-wrapper" class="ai-output-wrapper hidden">
+            <label for="ai-output-editor">Generated test code (review before saving)</label>
+            <textarea id="ai-output-editor" class="ai-output-editor" spellcheck="false"></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button id="ai-generator-cancel" type="button" class="secondary">Cancel</button>
+          <button id="ai-generator-save" type="button" disabled>Save to Org</button>
         </div>
       </div>
     </div>

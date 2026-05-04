@@ -49,6 +49,31 @@ What it does:
 4. Click **Load Coverage**
 5. (Optional) use **Export CSV** to download currently visible rows (respects filter)
 6. Turn on **Method-wise view** to switch from class-wise mode and click a class row to see which test methods covered each Apex method
+7. (Optional) **Generate Test (AI)** for the selected class - drafts an Apex test via your configured AI provider and saves it as a new test class or appends into an existing one (see "AI Test Generation" below)
+
+## AI Test Generation
+
+Click the gear icon in the header to choose a provider for AI-assisted test class generation:
+
+- **Salesforce Einstein LLM Generations** - reuses your active Salesforce session (Einstein GPT must be enabled in the org)
+- **Salesforce Models REST API** - org-managed multi-model endpoint
+- **Agentforce Agent** - send the prompt to a configured Agent (provide the Agent ID)
+- **OpenAI** - bring-your-own API key, called directly from the extension
+- **Anthropic Claude** - bring-your-own API key, called directly from the extension
+
+Then:
+
+1. Load coverage and click any class row to select it
+2. Click **Generate Test (AI)**
+3. Pick **Create new test class** or **Append into existing test class**
+4. Optionally add hints (e.g. "cover bulk update with 200 records", "use @TestSetup")
+5. Click **Generate**, review (and edit) the produced Apex code
+6. Click **Save to Org**:
+   - New class is saved via Tooling `ApexClass` POST
+   - Append uses the standard `MetadataContainer` + `ApexClassMember` + `ContainerAsyncRequest` flow (works in production and sandbox)
+7. Optionally queue the new/updated class for execution and auto-refresh coverage
+
+API keys are stored only on this device via `chrome.storage.local` and never sent to Salesforce.
 
 The extension queries:
 

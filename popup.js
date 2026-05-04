@@ -58,8 +58,74 @@ const sfUserNameEl = document.getElementById("sf-user-name");
 const sfEnvNameEl = document.getElementById("sf-env-name");
 const extensionVersionEl = document.getElementById("extension-version");
 
+// AI Test Generation - DOM refs
+const aiSettingsButton = document.getElementById("ai-settings-button");
+const aiSettingsModalEl = document.getElementById("ai-settings-modal");
+const aiSettingsCloseBtn = document.getElementById("ai-settings-close");
+const aiSettingsCancelBtn = document.getElementById("ai-settings-cancel");
+const aiSettingsSaveBtn = document.getElementById("ai-settings-save");
+const aiSettingsTestBtn = document.getElementById("ai-settings-test");
+const aiProviderSelectEl = document.getElementById("ai-provider-select");
+const aiModelGroupEl = document.getElementById("ai-model-group");
+const aiModelInputEl = document.getElementById("ai-model-input");
+const aiAgentGroupEl = document.getElementById("ai-agent-group");
+const aiAgentIdInputEl = document.getElementById("ai-agent-id-input");
+const aiApiKeyGroupEl = document.getElementById("ai-api-key-group");
+const aiApiKeyInputEl = document.getElementById("ai-api-key-input");
+const aiEndpointInputEl = document.getElementById("ai-endpoint-input");
+const aiAutoRunToggleEl = document.getElementById("ai-auto-run-toggle");
+const generateAiTestButton = document.getElementById("generate-ai-test-button");
+const aiClassPickerModalEl = document.getElementById("ai-class-picker-modal");
+const aiClassPickerCloseBtn = document.getElementById("ai-class-picker-close");
+const aiClassPickerCancelBtn = document.getElementById("ai-class-picker-cancel");
+const aiClassPickerContinueBtn = document.getElementById("ai-class-picker-continue");
+const aiClassPickerSearchEl = document.getElementById("ai-class-picker-search");
+const aiClassPickerLowOnlyEl = document.getElementById("ai-class-picker-low-only");
+const aiClassPickerListEl = document.getElementById("ai-class-picker-list");
+const aiGeneratorModalEl = document.getElementById("ai-generator-modal");
+const aiGeneratorTitleEl = document.getElementById("ai-generator-title");
+const aiGeneratorCloseBtn = document.getElementById("ai-generator-close");
+const aiGeneratorCancelBtn = document.getElementById("ai-generator-cancel");
+const aiGeneratorSummaryEl = document.getElementById("ai-generator-summary");
+const aiSaveModeSelectEl = document.getElementById("ai-save-mode-select");
+const aiNewClassGroupEl = document.getElementById("ai-new-class-group");
+const aiNewClassNameInputEl = document.getElementById("ai-new-class-name-input");
+const aiExistingClassGroupEl = document.getElementById("ai-existing-class-group");
+const aiExistingClassSelectEl = document.getElementById("ai-existing-class-select");
+const aiHintsInputEl = document.getElementById("ai-hints-input");
+const aiUncoveredSummaryEl = document.getElementById("ai-uncovered-summary");
+const aiGenerateBtn = document.getElementById("ai-generate-button");
+const aiRegenerateBtn = document.getElementById("ai-regenerate-button");
+const aiGeneratorStatusEl = document.getElementById("ai-generator-status");
+const aiOutputWrapperEl = document.getElementById("ai-output-wrapper");
+const aiOutputEditorEl = document.getElementById("ai-output-editor");
+const aiGeneratorSaveBtn = document.getElementById("ai-generator-save");
+
 const TERMINAL_TEST_QUEUE_STATUSES = new Set(["Completed", "Failed", "Aborted"]);
 const POLLING_TEST_QUEUE_STATUSES = new Set(["Queued", "Preparing", "Holding", "Processing"]);
+
+const AI_SETTINGS_STORAGE_KEY = "apexCoverageAiSettings";
+const AI_PROVIDERS = {
+  SALESFORCE_LLM: "salesforce_llm",
+  SALESFORCE_MODELS: "salesforce_models",
+  AGENTFORCE: "agentforce",
+  OPENAI: "openai",
+  ANTHROPIC: "anthropic"
+};
+const AI_DEFAULT_MODEL_BY_PROVIDER = {
+  [AI_PROVIDERS.SALESFORCE_LLM]: "sfdc_ai__DefaultGPT4Omni",
+  [AI_PROVIDERS.SALESFORCE_MODELS]: "sfdc_ai__DefaultGPT4Omni",
+  [AI_PROVIDERS.AGENTFORCE]: "",
+  [AI_PROVIDERS.OPENAI]: "gpt-4o-mini",
+  [AI_PROVIDERS.ANTHROPIC]: "claude-sonnet-4-5-20250929"
+};
+const AI_PROVIDER_LABEL = {
+  [AI_PROVIDERS.SALESFORCE_LLM]: "Salesforce Einstein LLM",
+  [AI_PROVIDERS.SALESFORCE_MODELS]: "Salesforce Models API",
+  [AI_PROVIDERS.AGENTFORCE]: "Agentforce Agent",
+  [AI_PROVIDERS.OPENAI]: "OpenAI",
+  [AI_PROVIDERS.ANTHROPIC]: "Anthropic"
+};
 
 let allRows = [];
 let visibleRows = [];
@@ -74,6 +140,10 @@ const pendingAbortClassIds = new Set();
 const inFlightAbortClassIds = new Set();
 const methodCoverageCache = new Map();
 const classCoverageCache = new Map();
+
+let aiSettings = getDefaultAiSettings();
+let aiGenerationContext = null;
+let aiPickerSelectedClassId = null;
 const sortState = {
   key: null,
   direction: "asc"
@@ -213,6 +283,10 @@ async function initialize() {
       closeClassCoverageModal();
     }
   });
+
+  await restoreAiSettings();
+  wireAiSettingsListeners();
+  wireAiGeneratorListeners();
 
   // Ensure method details section is hidden on initialization
   methodDetailsSectionEl.classList.add("hidden");
@@ -532,6 +606,7 @@ async function loadCoverage(options = {}) {
     setStatus(getErrorMessage(error), "error");
   } finally {
     setLoading(false);
+    updateGenerateAiTestButtonState();
   }
 }
 
@@ -760,6 +835,7 @@ function clearResults() {
   classCoverageCache.clear();
   closeClassCoverageModal();
   toggleResults(false);
+  updateGenerateAiTestButtonState();
 }
 
 function toggleResults(show) {
@@ -776,8 +852,15 @@ function toggleResults(show) {
   if (!show) {
     executeTestsButton.classList.add("hidden");
     executeTestsButton.disabled = true;
+    if (generateAiTestButton) {
+      generateAiTestButton.classList.add("hidden");
+      generateAiTestButton.disabled = true;
+    }
   } else {
     executeTestsButton.disabled = false;
+    if (generateAiTestButton) {
+      generateAiTestButton.classList.remove("hidden");
+    }
   }
   methodDetailsSectionEl.classList.toggle("hidden", true);
 }
@@ -788,6 +871,9 @@ function setLoading(isLoading) {
   exportButton.disabled = isLoading;
   executeTestsButton.disabled = isLoading;
   includeMethodDetailsEl.disabled = isLoading;
+  if (generateAiTestButton) {
+    generateAiTestButton.disabled = isLoading || allRows.length === 0 || !currentConfig;
+  }
   loadButton.textContent = isLoading ? "Loading..." : "Load Coverage";
   loadButton.classList.toggle("button-loading", isLoading);
   loadButton.setAttribute("aria-busy", isLoading ? "true" : "false");
@@ -1224,6 +1310,7 @@ async function handleMethodViewToggle() {
 async function handleClassSelection(classId, className) {
   selectedClassId = classId;
   renderRows(visibleRows);
+  updateGenerateAiTestButtonState();
 
   if (includeMethodDetailsEl.getAttribute("aria-pressed") !== "true") {
     return;
@@ -1775,6 +1862,9 @@ function setExecutionUiState(isRunning) {
   selectAllBtn.disabled = isRunning;
   deselectAllBtn.disabled = isRunning;
   abortAllTestsButtonEl.disabled = !isRunning;
+  if (generateAiTestButton) {
+    generateAiTestButton.disabled = isRunning || allRows.length === 0 || !currentConfig;
+  }
 
   if (!isRunning) {
     activeExecutionConfig = null;
@@ -2388,4 +2478,1184 @@ function extractAsyncTestRunId(payload) {
   }
 
   return null;
+}
+
+/* =========================================================================
+ * AI Test Generation
+ * =========================================================================
+ * Lets the user pick a class, ask an LLM (Salesforce Einstein, Agentforce,
+ * or BYO OpenAI/Anthropic) to draft an Apex test class, then save it to the
+ * org as a new class or appended into an existing test class.
+ * ========================================================================= */
+
+function getDefaultAiSettings() {
+  return {
+    provider: AI_PROVIDERS.SALESFORCE_LLM,
+    model: AI_DEFAULT_MODEL_BY_PROVIDER[AI_PROVIDERS.SALESFORCE_LLM],
+    agentId: "",
+    apiKey: "",
+    endpoint: "",
+    askToRunAfterSave: true
+  };
+}
+
+async function restoreAiSettings() {
+  try {
+    const stored = await chrome.storage.local.get(AI_SETTINGS_STORAGE_KEY);
+    const saved = stored[AI_SETTINGS_STORAGE_KEY];
+    if (saved && typeof saved === "object") {
+      aiSettings = { ...getDefaultAiSettings(), ...saved };
+    }
+  } catch (_error) {
+    aiSettings = getDefaultAiSettings();
+  }
+  applyAiSettingsToForm();
+}
+
+async function persistAiSettings() {
+  try {
+    await chrome.storage.local.set({ [AI_SETTINGS_STORAGE_KEY]: aiSettings });
+  } catch (_error) {
+    // ignore transient storage failures
+  }
+}
+
+function applyAiSettingsToForm() {
+  if (!aiProviderSelectEl) {
+    return;
+  }
+  aiProviderSelectEl.value = aiSettings.provider;
+  aiModelInputEl.value = aiSettings.model || "";
+  aiAgentIdInputEl.value = aiSettings.agentId || "";
+  aiApiKeyInputEl.value = aiSettings.apiKey || "";
+  aiEndpointInputEl.value = aiSettings.endpoint || "";
+  aiAutoRunToggleEl.checked = Boolean(aiSettings.askToRunAfterSave);
+  updateAiSettingsVisibility();
+}
+
+function updateAiSettingsVisibility() {
+  const provider = aiProviderSelectEl.value;
+  const isAgent = provider === AI_PROVIDERS.AGENTFORCE;
+  const isByo = provider === AI_PROVIDERS.OPENAI || provider === AI_PROVIDERS.ANTHROPIC;
+
+  aiAgentGroupEl.classList.toggle("hidden", !isAgent);
+  aiApiKeyGroupEl.classList.toggle("hidden", !isByo);
+  aiModelGroupEl.classList.toggle("hidden", isAgent);
+}
+
+function readAiSettingsFromForm() {
+  return {
+    provider: aiProviderSelectEl.value,
+    model: aiModelInputEl.value.trim(),
+    agentId: aiAgentIdInputEl.value.trim(),
+    apiKey: aiApiKeyInputEl.value,
+    endpoint: aiEndpointInputEl.value.trim(),
+    askToRunAfterSave: Boolean(aiAutoRunToggleEl.checked)
+  };
+}
+
+function wireAiSettingsListeners() {
+  if (!aiSettingsButton) {
+    return;
+  }
+
+  aiSettingsButton.addEventListener("click", () => {
+    applyAiSettingsToForm();
+    aiSettingsModalEl.classList.remove("hidden");
+  });
+
+  aiSettingsCloseBtn.addEventListener("click", () => {
+    aiSettingsModalEl.classList.add("hidden");
+  });
+
+  aiSettingsCancelBtn.addEventListener("click", () => {
+    aiSettingsModalEl.classList.add("hidden");
+  });
+
+  aiSettingsModalEl.addEventListener("click", (event) => {
+    if (event.target === aiSettingsModalEl) {
+      aiSettingsModalEl.classList.add("hidden");
+    }
+  });
+
+  aiProviderSelectEl.addEventListener("change", () => {
+    const provider = aiProviderSelectEl.value;
+    const defaultModel = AI_DEFAULT_MODEL_BY_PROVIDER[provider] || "";
+    if (!aiModelInputEl.value.trim() || isKnownDefaultModel(aiModelInputEl.value.trim())) {
+      aiModelInputEl.value = defaultModel;
+    }
+    updateAiSettingsVisibility();
+  });
+
+  aiSettingsSaveBtn.addEventListener("click", async () => {
+    aiSettings = readAiSettingsFromForm();
+    await persistAiSettings();
+    aiSettingsModalEl.classList.add("hidden");
+    setStatus("AI test generation settings saved.", "success");
+  });
+
+  aiSettingsTestBtn.addEventListener("click", async () => {
+    const previousLabel = aiSettingsTestBtn.textContent;
+    aiSettingsTestBtn.disabled = true;
+    aiSettingsTestBtn.textContent = "Testing...";
+    try {
+      const draftSettings = readAiSettingsFromForm();
+      const reply = await callAiProvider(draftSettings, "Reply with the single word OK if you can read this prompt.");
+      if (reply && /OK/i.test(reply)) {
+        setStatus(`AI provider responded successfully (${AI_PROVIDER_LABEL[draftSettings.provider] || draftSettings.provider}).`, "success");
+      } else {
+        setStatus(`AI provider responded but the reply did not match "OK". Configuration may still be usable.`, "");
+      }
+    } catch (error) {
+      setStatus(`AI provider test failed: ${getErrorMessage(error)}`, "error");
+    } finally {
+      aiSettingsTestBtn.disabled = false;
+      aiSettingsTestBtn.textContent = previousLabel;
+    }
+  });
+}
+
+function isKnownDefaultModel(value) {
+  return Object.values(AI_DEFAULT_MODEL_BY_PROVIDER).includes(value);
+}
+
+function wireAiGeneratorListeners() {
+  if (!generateAiTestButton) {
+    return;
+  }
+
+  generateAiTestButton.addEventListener("click", () => {
+    openAiClassPicker();
+  });
+
+  aiClassPickerCloseBtn.addEventListener("click", () => {
+    closeAiClassPicker();
+  });
+
+  aiClassPickerCancelBtn.addEventListener("click", () => {
+    closeAiClassPicker();
+  });
+
+  aiClassPickerModalEl.addEventListener("click", (event) => {
+    if (event.target === aiClassPickerModalEl) {
+      closeAiClassPicker();
+    }
+  });
+
+  aiClassPickerSearchEl.addEventListener("input", () => {
+    renderAiClassPickerList();
+  });
+
+  aiClassPickerLowOnlyEl.addEventListener("change", () => {
+    renderAiClassPickerList();
+  });
+
+  aiClassPickerContinueBtn.addEventListener("click", async () => {
+    if (!aiPickerSelectedClassId) {
+      return;
+    }
+    const row = allRows.find((item) => item.id === aiPickerSelectedClassId);
+    if (!row) {
+      setStatus("Selected class is no longer available. Reload coverage and try again.", "error");
+      return;
+    }
+
+    selectedClassId = row.id;
+    renderRows(visibleRows);
+    closeAiClassPicker();
+    await openAiGeneratorForSelectedClass();
+  });
+
+  aiGeneratorCloseBtn.addEventListener("click", () => {
+    closeAiGeneratorModal();
+  });
+
+  aiGeneratorCancelBtn.addEventListener("click", () => {
+    closeAiGeneratorModal();
+  });
+
+  aiGeneratorModalEl.addEventListener("click", (event) => {
+    if (event.target === aiGeneratorModalEl) {
+      closeAiGeneratorModal();
+    }
+  });
+
+  aiSaveModeSelectEl.addEventListener("change", () => {
+    updateSaveModeVisibility();
+  });
+
+  aiGenerateBtn.addEventListener("click", async () => {
+    await runAiGeneration({ regenerate: false });
+  });
+
+  aiRegenerateBtn.addEventListener("click", async () => {
+    await runAiGeneration({ regenerate: true });
+  });
+
+  aiGeneratorSaveBtn.addEventListener("click", async () => {
+    await saveGeneratedTest();
+  });
+
+  aiOutputEditorEl.addEventListener("input", () => {
+    aiGeneratorSaveBtn.disabled = aiOutputEditorEl.value.trim().length === 0;
+  });
+}
+
+function updateGenerateAiTestButtonState() {
+  if (!generateAiTestButton) {
+    return;
+  }
+
+  const hasResults = allRows.length > 0 && Boolean(currentConfig);
+  generateAiTestButton.classList.toggle("hidden", !hasResults);
+  generateAiTestButton.disabled = !hasResults || isTestExecutionInProgress;
+}
+
+function updateSaveModeVisibility() {
+  const mode = aiSaveModeSelectEl.value;
+  aiNewClassGroupEl.classList.toggle("hidden", mode !== "new");
+  aiExistingClassGroupEl.classList.toggle("hidden", mode !== "append");
+}
+
+function openAiClassPicker() {
+  if (!currentConfig) {
+    setStatus("Load coverage first before generating tests.", "error");
+    return;
+  }
+  if (!allRows || allRows.length === 0) {
+    setStatus("No classes loaded yet. Click 'Load Coverage' first.", "error");
+    return;
+  }
+
+  aiPickerSelectedClassId = selectedClassId || null;
+  aiClassPickerSearchEl.value = "";
+  aiClassPickerLowOnlyEl.checked = false;
+  aiClassPickerContinueBtn.disabled = !aiPickerSelectedClassId;
+  renderAiClassPickerList();
+  aiClassPickerModalEl.classList.remove("hidden");
+
+  setTimeout(() => {
+    aiClassPickerSearchEl.focus();
+  }, 50);
+}
+
+function closeAiClassPicker() {
+  aiClassPickerModalEl.classList.add("hidden");
+}
+
+function renderAiClassPickerList() {
+  aiClassPickerListEl.innerHTML = "";
+
+  const searchTerm = (aiClassPickerSearchEl.value || "").trim().toLowerCase();
+  const lowOnly = aiClassPickerLowOnlyEl.checked;
+  const excludePackages = excludePackagesEl.getAttribute("aria-pressed") === "true";
+
+  const filtered = allRows.filter((row) => {
+    if (searchTerm && !row.name.toLowerCase().includes(searchTerm)) {
+      return false;
+    }
+    if (excludePackages && row.namespace !== "-") {
+      return false;
+    }
+    if (lowOnly) {
+      const percent = typeof row.percent === "number" ? row.percent : 0;
+      if (percent >= 75) {
+        return false;
+      }
+    }
+    return true;
+  });
+
+  filtered.sort((a, b) => {
+    const aPercent = typeof a.percent === "number" ? a.percent : 101;
+    const bPercent = typeof b.percent === "number" ? b.percent : 101;
+    if (aPercent !== bPercent) {
+      return aPercent - bPercent;
+    }
+    return String(a.name || "").localeCompare(String(b.name || ""));
+  });
+
+  if (filtered.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "ai-class-picker-empty";
+    empty.textContent = "No classes match the current filters.";
+    aiClassPickerListEl.appendChild(empty);
+    aiClassPickerContinueBtn.disabled = true;
+    return;
+  }
+
+  for (const row of filtered) {
+    const item = document.createElement("label");
+    item.className = "ai-class-picker-item";
+    if (row.id === aiPickerSelectedClassId) {
+      item.classList.add("selected");
+    }
+
+    const radio = document.createElement("input");
+    radio.type = "radio";
+    radio.name = "ai-class-picker-radio";
+    radio.value = row.id;
+    radio.checked = row.id === aiPickerSelectedClassId;
+    radio.addEventListener("change", () => {
+      aiPickerSelectedClassId = row.id;
+      aiClassPickerContinueBtn.disabled = false;
+      renderAiClassPickerList();
+    });
+
+    const nameWrap = document.createElement("div");
+    const nameSpan = document.createElement("span");
+    nameSpan.className = "ai-class-picker-name";
+    nameSpan.textContent = row.name;
+    nameWrap.appendChild(nameSpan);
+    if (row.namespace && row.namespace !== "-") {
+      const ns = document.createElement("span");
+      ns.className = "ai-class-picker-namespace";
+      ns.textContent = `(${row.namespace})`;
+      nameWrap.appendChild(ns);
+    }
+
+    const coverage = document.createElement("span");
+    coverage.className = `ai-class-picker-coverage ${getCoverageClass(row.percent)}`;
+    coverage.textContent = row.percent === null ? "no data" : `${row.percent.toFixed(1)}%`;
+
+    const uncovered = document.createElement("span");
+    uncovered.className = "ai-class-picker-uncovered";
+    uncovered.textContent = `${row.uncovered} uncov.`;
+
+    item.appendChild(radio);
+    item.appendChild(nameWrap);
+    item.appendChild(coverage);
+    item.appendChild(uncovered);
+
+    aiClassPickerListEl.appendChild(item);
+  }
+}
+
+async function openAiGeneratorForSelectedClass() {
+  if (!currentConfig) {
+    setStatus("Load coverage first before generating tests.", "error");
+    return;
+  }
+
+  if (!selectedClassId) {
+    setStatus("Select a class row first to generate a test for it.", "error");
+    return;
+  }
+
+  const targetRow = allRows.find((row) => row.id === selectedClassId);
+  if (!targetRow) {
+    setStatus("Selected class is no longer available. Reload coverage and try again.", "error");
+    return;
+  }
+
+  aiGenerationContext = {
+    targetClassId: targetRow.id,
+    targetClassName: targetRow.name,
+    targetNamespace: targetRow.namespace,
+    classBody: "",
+    uncoveredMethods: [],
+    existingTestBody: "",
+    existingTestClassId: "",
+    existingTestClassName: "",
+    generatedCode: ""
+  };
+
+  aiGeneratorTitleEl.textContent = `Generate Apex Test - ${targetRow.name}`;
+  aiGeneratorSummaryEl.textContent = "Loading class context...";
+  aiGeneratorStatusEl.textContent = "";
+  aiGeneratorStatusEl.className = "muted";
+  aiOutputEditorEl.value = "";
+  aiOutputWrapperEl.classList.add("hidden");
+  aiUncoveredSummaryEl.classList.add("hidden");
+  aiGenerateBtn.classList.remove("hidden");
+  aiGenerateBtn.disabled = true;
+  aiRegenerateBtn.classList.add("hidden");
+  aiGeneratorSaveBtn.disabled = true;
+  aiHintsInputEl.value = "";
+  aiSaveModeSelectEl.value = "new";
+  aiNewClassNameInputEl.value = `${targetRow.name}Test`;
+  populateExistingTestClassesDropdown();
+  updateSaveModeVisibility();
+
+  aiGeneratorModalEl.classList.remove("hidden");
+
+  try {
+    const [classRecord, methodCoverage] = await Promise.all([
+      fetchApexClassSource(targetRow.id),
+      getMethodCoverageDetails(targetRow.id).catch(() => [])
+    ]);
+
+    aiGenerationContext.classBody = (classRecord && classRecord.Body) || "";
+    aiGenerationContext.uncoveredMethods = computeUncoveredMethodNames(
+      aiGenerationContext.classBody,
+      methodCoverage
+    );
+
+    renderUncoveredSummary();
+    aiGeneratorSummaryEl.textContent = formatGeneratorSummary(targetRow);
+    aiGenerateBtn.disabled = false;
+  } catch (error) {
+    aiGeneratorSummaryEl.textContent = `Could not load class context: ${getErrorMessage(error)}`;
+    aiGenerateBtn.disabled = true;
+  }
+}
+
+function closeAiGeneratorModal() {
+  aiGeneratorModalEl.classList.add("hidden");
+  aiGenerationContext = null;
+}
+
+function populateExistingTestClassesDropdown() {
+  aiExistingClassSelectEl.innerHTML = "";
+  if (!testClasses || testClasses.length === 0) {
+    const option = document.createElement("option");
+    option.value = "";
+    option.textContent = "No test classes found";
+    option.disabled = true;
+    aiExistingClassSelectEl.appendChild(option);
+    aiExistingClassSelectEl.disabled = true;
+    return;
+  }
+
+  aiExistingClassSelectEl.disabled = false;
+  const placeholder = document.createElement("option");
+  placeholder.value = "";
+  placeholder.textContent = "-- Select a test class --";
+  aiExistingClassSelectEl.appendChild(placeholder);
+
+  const sorted = [...testClasses].sort((a, b) =>
+    String(a.Name || "").localeCompare(String(b.Name || ""))
+  );
+  for (const testClass of sorted) {
+    const option = document.createElement("option");
+    option.value = testClass.Id;
+    option.textContent = testClass.Name;
+    aiExistingClassSelectEl.appendChild(option);
+  }
+}
+
+function computeUncoveredMethodNames(classBody, methodCoverage) {
+  const methodNames = extractMethodRanges(classBody).map((m) => m.name);
+  const coveredNames = new Set(
+    (methodCoverage || [])
+      .filter((entry) => entry && Array.isArray(entry.tests) && entry.tests.length > 0)
+      .map((entry) => entry.methodName)
+  );
+  return methodNames.filter((name) => !coveredNames.has(name));
+}
+
+function renderUncoveredSummary() {
+  const uncovered = aiGenerationContext ? aiGenerationContext.uncoveredMethods : [];
+  if (!uncovered || uncovered.length === 0) {
+    aiUncoveredSummaryEl.classList.add("hidden");
+    aiUncoveredSummaryEl.innerHTML = "";
+    return;
+  }
+
+  aiUncoveredSummaryEl.classList.remove("hidden");
+  aiUncoveredSummaryEl.innerHTML =
+    `<strong>Uncovered methods (${uncovered.length}):</strong>` +
+    `<span>${uncovered.map((name) => escapeHtml(name)).join(", ")}</span>`;
+}
+
+function formatGeneratorSummary(row) {
+  const percentText = row.percent === null ? "no coverage data" : `${row.percent.toFixed(2)}%`;
+  return (
+    `Target: ${row.name} (covered ${row.covered} / uncovered ${row.uncovered}, ${percentText}). ` +
+    `Provider: ${AI_PROVIDER_LABEL[aiSettings.provider] || aiSettings.provider}` +
+    (aiSettings.model ? `, model: ${aiSettings.model}` : "") +
+    "."
+  );
+}
+
+async function runAiGeneration({ regenerate }) {
+  if (!aiGenerationContext) {
+    return;
+  }
+
+  if (!isAiSettingsConfigured(aiSettings)) {
+    setAiGeneratorStatus(
+      "AI provider is not configured. Open Settings (gear icon) to set it up.",
+      "error"
+    );
+    return;
+  }
+
+  aiGenerateBtn.disabled = true;
+  aiRegenerateBtn.disabled = true;
+  aiGeneratorSaveBtn.disabled = true;
+  setAiGeneratorStatus("Generating Apex test code...", "loading");
+
+  try {
+    if (aiSaveModeSelectEl.value === "append") {
+      await ensureExistingTestBodyLoaded();
+    } else {
+      aiGenerationContext.existingTestBody = "";
+      aiGenerationContext.existingTestClassId = "";
+      aiGenerationContext.existingTestClassName = "";
+    }
+
+    const prompt = buildTestGenerationPrompt({
+      regenerate,
+      hints: aiHintsInputEl.value.trim()
+    });
+
+    const reply = await callAiProvider(aiSettings, prompt);
+    const code = extractApexCodeFromReply(reply);
+    if (!code) {
+      throw new Error("AI provider returned no Apex code. Try again or refine the hints.");
+    }
+
+    aiGenerationContext.generatedCode = code;
+    aiOutputEditorEl.value = code;
+    aiOutputWrapperEl.classList.remove("hidden");
+    aiRegenerateBtn.classList.remove("hidden");
+    aiGenerateBtn.classList.add("hidden");
+    aiGeneratorSaveBtn.disabled = false;
+    setAiGeneratorStatus("Generated. Review the code below, edit if needed, then save.", "success");
+  } catch (error) {
+    setAiGeneratorStatus(getErrorMessage(error), "error");
+    aiGenerateBtn.classList.remove("hidden");
+  } finally {
+    aiGenerateBtn.disabled = false;
+    aiRegenerateBtn.disabled = false;
+  }
+}
+
+async function ensureExistingTestBodyLoaded() {
+  const targetTestClassId = aiExistingClassSelectEl.value;
+  if (!targetTestClassId) {
+    throw new Error("Select an existing test class to append into.");
+  }
+
+  if (
+    aiGenerationContext.existingTestClassId === targetTestClassId &&
+    aiGenerationContext.existingTestBody
+  ) {
+    return;
+  }
+
+  const record = await fetchApexClassSource(targetTestClassId);
+  if (!record) {
+    throw new Error("Could not load the selected existing test class.");
+  }
+  aiGenerationContext.existingTestClassId = record.Id || targetTestClassId;
+  aiGenerationContext.existingTestClassName = record.Name || "";
+  aiGenerationContext.existingTestBody = record.Body || "";
+}
+
+function setAiGeneratorStatus(message, type) {
+  aiGeneratorStatusEl.textContent = message || "";
+  aiGeneratorStatusEl.className = "muted";
+  if (type) {
+    aiGeneratorStatusEl.classList.add(type);
+  }
+}
+
+function isAiSettingsConfigured(settings) {
+  if (!settings || !settings.provider) {
+    return false;
+  }
+  if (settings.provider === AI_PROVIDERS.AGENTFORCE && !settings.agentId) {
+    return false;
+  }
+  if (
+    (settings.provider === AI_PROVIDERS.OPENAI ||
+      settings.provider === AI_PROVIDERS.ANTHROPIC) &&
+    !settings.apiKey
+  ) {
+    return false;
+  }
+  return true;
+}
+
+function buildTestGenerationPrompt({ regenerate, hints }) {
+  const ctx = aiGenerationContext;
+  const isAppend = aiSaveModeSelectEl.value === "append";
+  const targetName = ctx.targetClassName;
+  const newClassName = (aiNewClassNameInputEl.value || `${targetName}Test`).trim();
+
+  const lines = [
+    "You are an expert Salesforce Apex developer.",
+    "Write a high-quality Apex test class that maximizes code coverage and tests behaviour, not just lines.",
+    "Strictly follow these rules:",
+    "- Output ONLY raw Apex code (no markdown fences, no commentary, no explanations).",
+    "- The whole reply must be valid Apex source that compiles in Salesforce.",
+    "- Use @isTest annotations and Test.startTest()/Test.stopTest() where appropriate.",
+    "- Prefer Test.setMock for HTTP callouts and proper data setup via @TestSetup.",
+    "- Avoid SeeAllData=true unless absolutely required.",
+    "- Use bulk-friendly assertions (System.assertEquals/System.assertNotEquals/System.assert).",
+    "- Cover positive, negative, bulk, and exception paths."
+  ];
+
+  if (isAppend) {
+    lines.push(
+      `- Output a COMPLETE replacement of the existing test class "${ctx.existingTestClassName || "the test class below"}".`,
+      "- Keep all existing test methods intact. ADD new @isTest methods that cover the uncovered behaviour of the target class.",
+      "- Preserve the existing class signature (name, modifiers, annotations, helper methods)."
+    );
+  } else {
+    lines.push(
+      `- The test class name MUST be exactly: ${newClassName}`,
+      "- Class declaration MUST start with: @isTest",
+      `- Use: private class ${newClassName} { ... }`
+    );
+  }
+
+  if (regenerate) {
+    lines.push("- Produce a different solution from any earlier attempt; explore alternate scenarios.");
+  }
+
+  if (hints) {
+    lines.push(`Additional user hints: ${hints}`);
+  }
+
+  if (ctx.uncoveredMethods.length > 0) {
+    lines.push(
+      `Methods reported as uncovered (focus on these): ${ctx.uncoveredMethods.join(", ")}`
+    );
+  }
+
+  lines.push("");
+  lines.push(`--- Target Apex class: ${targetName} ---`);
+  lines.push(ctx.classBody || "// (class body unavailable)");
+
+  if (isAppend && ctx.existingTestBody) {
+    lines.push("");
+    lines.push(`--- Existing test class: ${ctx.existingTestClassName} ---`);
+    lines.push(ctx.existingTestBody);
+  }
+
+  return lines.join("\n");
+}
+
+function extractApexCodeFromReply(reply) {
+  const text = String(reply || "").trim();
+  if (!text) {
+    return "";
+  }
+
+  const fenceMatch = text.match(/```(?:apex|java|cls)?\s*([\s\S]*?)```/i);
+  if (fenceMatch && fenceMatch[1]) {
+    return fenceMatch[1].trim();
+  }
+
+  return text;
+}
+
+/* ----- Provider abstraction ----- */
+
+async function callAiProvider(settings, prompt) {
+  switch (settings.provider) {
+    case AI_PROVIDERS.SALESFORCE_LLM:
+      return await callSalesforceEinsteinLlmGenerations(settings, prompt);
+    case AI_PROVIDERS.SALESFORCE_MODELS:
+      return await callSalesforceModelsApi(settings, prompt);
+    case AI_PROVIDERS.AGENTFORCE:
+      return await callAgentforceAgent(settings, prompt);
+    case AI_PROVIDERS.OPENAI:
+      return await callOpenAi(settings, prompt);
+    case AI_PROVIDERS.ANTHROPIC:
+      return await callAnthropic(settings, prompt);
+    default:
+      throw new Error(`Unknown AI provider: ${settings.provider}`);
+  }
+}
+
+function requireSalesforceSession() {
+  if (!currentConfig || !currentConfig.instanceUrl || !currentConfig.accessToken) {
+    throw new Error("No active Salesforce session. Click 'Use Logged-in Tab Session' first.");
+  }
+  assertTrustedInstanceUrl(currentConfig.instanceUrl);
+  return currentConfig;
+}
+
+async function callSalesforceEinsteinLlmGenerations(settings, prompt) {
+  const config = requireSalesforceSession();
+  const path =
+    settings.endpoint ||
+    `/services/data/v${config.apiVersion}/einstein/llm/generations`;
+  const url = path.startsWith("http") ? path : `${config.instanceUrl}${path}`;
+
+  const body = {
+    prompt,
+    promptTextOrTemplate: prompt,
+    modelName: settings.model || AI_DEFAULT_MODEL_BY_PROVIDER[AI_PROVIDERS.SALESFORCE_LLM]
+  };
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${config.accessToken}`,
+      "Content-Type": "application/json",
+      Accept: "application/json"
+    },
+    body: JSON.stringify(body)
+  });
+  const payload = await parseJsonResponse(response);
+  if (!response.ok) {
+    throw new Error(extractSalesforceError(payload, response.status));
+  }
+  return extractTextFromAnyPayload(payload);
+}
+
+async function callSalesforceModelsApi(settings, prompt) {
+  const config = requireSalesforceSession();
+  const model = settings.model || AI_DEFAULT_MODEL_BY_PROVIDER[AI_PROVIDERS.SALESFORCE_MODELS];
+  const path =
+    settings.endpoint ||
+    `/services/data/v${config.apiVersion}/einstein/platform/v1/models/${encodeURIComponent(
+      model
+    )}/generations`;
+  const url = path.startsWith("http") ? path : `${config.instanceUrl}${path}`;
+
+  const body = {
+    prompt,
+    promptTextOrTemplate: prompt,
+    modelName: model
+  };
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${config.accessToken}`,
+      "Content-Type": "application/json",
+      Accept: "application/json",
+      "x-sfdc-app-context": "EinsteinGPT",
+      "x-client-feature-id": "ai-platform-models-connected-app"
+    },
+    body: JSON.stringify(body)
+  });
+  const payload = await parseJsonResponse(response);
+  if (!response.ok) {
+    throw new Error(extractSalesforceError(payload, response.status));
+  }
+  return extractTextFromAnyPayload(payload);
+}
+
+async function callAgentforceAgent(settings, prompt) {
+  const config = requireSalesforceSession();
+  if (!settings.agentId) {
+    throw new Error("Agentforce Agent ID is required. Open Settings to configure it.");
+  }
+  const basePath =
+    settings.endpoint ||
+    `/services/data/v${config.apiVersion}/einstein/ai-agent/sessions`;
+  const sessionUrl = (basePath.startsWith("http") ? basePath : `${config.instanceUrl}${basePath}`) +
+    `/${encodeURIComponent(settings.agentId)}`;
+
+  const startResponse = await fetch(sessionUrl, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${config.accessToken}`,
+      "Content-Type": "application/json",
+      Accept: "application/json"
+    },
+    body: JSON.stringify({
+      externalSessionKey: `apex-cov-${Date.now()}`,
+      instanceConfig: { endpoint: config.instanceUrl },
+      streamingCapabilities: { chunkTypes: ["Text"] }
+    })
+  });
+  const startPayload = await parseJsonResponse(startResponse);
+  if (!startResponse.ok) {
+    throw new Error(extractSalesforceError(startPayload, startResponse.status));
+  }
+
+  const sessionId = startPayload.sessionId || startPayload.id;
+  if (!sessionId) {
+    throw new Error("Agentforce session did not return a session id.");
+  }
+
+  const messageUrl =
+    (basePath.startsWith("http") ? basePath : `${config.instanceUrl}${basePath}`) +
+    `/${encodeURIComponent(sessionId)}/messages`;
+
+  const messageResponse = await fetch(messageUrl, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${config.accessToken}`,
+      "Content-Type": "application/json",
+      Accept: "application/json"
+    },
+    body: JSON.stringify({
+      message: {
+        sequenceId: Date.now(),
+        type: "Text",
+        text: prompt
+      }
+    })
+  });
+  const messagePayload = await parseJsonResponse(messageResponse);
+  if (!messageResponse.ok) {
+    throw new Error(extractSalesforceError(messagePayload, messageResponse.status));
+  }
+  return extractTextFromAnyPayload(messagePayload);
+}
+
+async function callOpenAi(settings, prompt) {
+  const url = settings.endpoint || "https://api.openai.com/v1/chat/completions";
+  const model = settings.model || AI_DEFAULT_MODEL_BY_PROVIDER[AI_PROVIDERS.OPENAI];
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${settings.apiKey}`,
+      "Content-Type": "application/json",
+      Accept: "application/json"
+    },
+    body: JSON.stringify({
+      model,
+      temperature: 0.2,
+      messages: [
+        {
+          role: "system",
+          content:
+            "You are an expert Salesforce Apex developer. Output only raw Apex source code without markdown fences."
+        },
+        { role: "user", content: prompt }
+      ]
+    })
+  });
+  const payload = await parseJsonResponse(response);
+  if (!response.ok) {
+    const message =
+      (payload && payload.error && payload.error.message) ||
+      `OpenAI request failed with status ${response.status}.`;
+    throw new Error(message);
+  }
+  const content =
+    payload &&
+    payload.choices &&
+    payload.choices[0] &&
+    payload.choices[0].message &&
+    payload.choices[0].message.content;
+  return content || "";
+}
+
+async function callAnthropic(settings, prompt) {
+  const url = settings.endpoint || "https://api.anthropic.com/v1/messages";
+  const model = settings.model || AI_DEFAULT_MODEL_BY_PROVIDER[AI_PROVIDERS.ANTHROPIC];
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      "x-api-key": settings.apiKey,
+      "anthropic-version": "2023-06-01",
+      "anthropic-dangerous-direct-browser-access": "true",
+      "Content-Type": "application/json",
+      Accept: "application/json"
+    },
+    body: JSON.stringify({
+      model,
+      max_tokens: 4000,
+      temperature: 0.2,
+      system:
+        "You are an expert Salesforce Apex developer. Output only raw Apex source code without markdown fences.",
+      messages: [{ role: "user", content: prompt }]
+    })
+  });
+  const payload = await parseJsonResponse(response);
+  if (!response.ok) {
+    const message =
+      (payload && payload.error && payload.error.message) ||
+      `Anthropic request failed with status ${response.status}.`;
+    throw new Error(message);
+  }
+  if (Array.isArray(payload.content)) {
+    return payload.content
+      .filter((block) => block && block.type === "text" && typeof block.text === "string")
+      .map((block) => block.text)
+      .join("\n");
+  }
+  return "";
+}
+
+function extractTextFromAnyPayload(payload) {
+  if (!payload) {
+    return "";
+  }
+  if (typeof payload === "string") {
+    return payload;
+  }
+  if (typeof payload.generation === "string") {
+    return payload.generation;
+  }
+  if (payload.generation && typeof payload.generation.generatedText === "string") {
+    return payload.generation.generatedText;
+  }
+  if (Array.isArray(payload.generations) && payload.generations.length > 0) {
+    const first = payload.generations[0];
+    if (first && typeof first === "object") {
+      if (typeof first.text === "string") {
+        return first.text;
+      }
+      if (typeof first.generatedText === "string") {
+        return first.generatedText;
+      }
+    }
+  }
+  if (typeof payload.text === "string") {
+    return payload.text;
+  }
+  if (typeof payload.message === "string") {
+    return payload.message;
+  }
+  if (payload.message && typeof payload.message.text === "string") {
+    return payload.message.text;
+  }
+  if (Array.isArray(payload.messages)) {
+    const textParts = [];
+    for (const msg of payload.messages) {
+      if (msg && typeof msg.text === "string") {
+        textParts.push(msg.text);
+      } else if (msg && msg.message && typeof msg.message.text === "string") {
+        textParts.push(msg.message.text);
+      }
+    }
+    if (textParts.length > 0) {
+      return textParts.join("\n");
+    }
+  }
+  return "";
+}
+
+/* ----- Save flows ----- */
+
+async function saveGeneratedTest() {
+  if (!aiGenerationContext) {
+    return;
+  }
+
+  const code = aiOutputEditorEl.value.trim();
+  if (!code) {
+    setAiGeneratorStatus("Generated code is empty.", "error");
+    return;
+  }
+
+  const mode = aiSaveModeSelectEl.value;
+  aiGeneratorSaveBtn.disabled = true;
+  aiGenerateBtn.disabled = true;
+  aiRegenerateBtn.disabled = true;
+  setAiGeneratorStatus("Saving to org...", "loading");
+
+  try {
+    let savedClassId;
+    let savedClassName;
+
+    if (mode === "new") {
+      const newClassName = (aiNewClassNameInputEl.value || "").trim();
+      if (!newClassName) {
+        throw new Error("Provide a class name for the new test class.");
+      }
+      const result = await createNewApexClass(newClassName, code);
+      savedClassId = result.id;
+      savedClassName = newClassName;
+      setAiGeneratorStatus(`Created new test class "${savedClassName}".`, "success");
+    } else if (mode === "append") {
+      if (!aiGenerationContext.existingTestClassId) {
+        await ensureExistingTestBodyLoaded();
+      }
+      await updateApexClassBodyViaContainer(
+        aiGenerationContext.existingTestClassId,
+        code
+      );
+      savedClassId = aiGenerationContext.existingTestClassId;
+      savedClassName = aiGenerationContext.existingTestClassName;
+      setAiGeneratorStatus(
+        `Updated existing test class "${savedClassName}".`,
+        "success"
+      );
+    } else {
+      throw new Error(`Unsupported save mode: ${mode}`);
+    }
+
+    const shouldRun =
+      aiSettings.askToRunAfterSave &&
+      window.confirm(
+        `Test class "${savedClassName}" saved. Queue it for execution now to refresh coverage?`
+      );
+
+    aiGeneratorSaveBtn.disabled = false;
+
+    if (shouldRun) {
+      closeAiGeneratorModal();
+      await runJustSavedTestClass(savedClassId, savedClassName);
+    } else {
+      await loadCoverage({
+        preserveExpandedSections: true,
+        collapseMethodDetailsSection: true
+      });
+    }
+  } catch (error) {
+    setAiGeneratorStatus(`Save failed: ${getErrorMessage(error)}`, "error");
+    aiGeneratorSaveBtn.disabled = false;
+  } finally {
+    aiGenerateBtn.disabled = false;
+    aiRegenerateBtn.disabled = false;
+  }
+}
+
+async function createNewApexClass(name, body) {
+  const config = requireSalesforceSession();
+  const url = `${config.instanceUrl}/services/data/v${config.apiVersion}/tooling/sobjects/ApexClass`;
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${config.accessToken}`,
+      "Content-Type": "application/json",
+      Accept: "application/json"
+    },
+    body: JSON.stringify({ Name: name, Body: body })
+  });
+  const payload = await parseJsonResponse(response);
+  if (!response.ok) {
+    throw new Error(extractSalesforceError(payload, response.status));
+  }
+  return { id: payload.id || payload.Id || "" };
+}
+
+async function updateApexClassBodyViaContainer(existingClassId, newBody) {
+  const config = requireSalesforceSession();
+  const containerName = `AICovGen_${Date.now()}`;
+  const baseToolingUrl = `${config.instanceUrl}/services/data/v${config.apiVersion}/tooling/sobjects`;
+
+  const containerResponse = await fetch(`${baseToolingUrl}/MetadataContainer`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${config.accessToken}`,
+      "Content-Type": "application/json",
+      Accept: "application/json"
+    },
+    body: JSON.stringify({ Name: containerName })
+  });
+  const containerPayload = await parseJsonResponse(containerResponse);
+  if (!containerResponse.ok) {
+    throw new Error(extractSalesforceError(containerPayload, containerResponse.status));
+  }
+  const containerId = containerPayload.id || containerPayload.Id;
+  if (!containerId) {
+    throw new Error("MetadataContainer creation did not return an id.");
+  }
+
+  try {
+    const memberResponse = await fetch(`${baseToolingUrl}/ApexClassMember`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${config.accessToken}`,
+        "Content-Type": "application/json",
+        Accept: "application/json"
+      },
+      body: JSON.stringify({
+        MetadataContainerId: containerId,
+        ContentEntityId: existingClassId,
+        Body: newBody
+      })
+    });
+    const memberPayload = await parseJsonResponse(memberResponse);
+    if (!memberResponse.ok) {
+      throw new Error(extractSalesforceError(memberPayload, memberResponse.status));
+    }
+
+    const requestResponse = await fetch(`${baseToolingUrl}/ContainerAsyncRequest`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${config.accessToken}`,
+        "Content-Type": "application/json",
+        Accept: "application/json"
+      },
+      body: JSON.stringify({
+        MetadataContainerId: containerId,
+        IsCheckOnly: false
+      })
+    });
+    const requestPayload = await parseJsonResponse(requestResponse);
+    if (!requestResponse.ok) {
+      throw new Error(extractSalesforceError(requestPayload, requestResponse.status));
+    }
+    const requestId = requestPayload.id || requestPayload.Id;
+    if (!requestId) {
+      throw new Error("ContainerAsyncRequest did not return an id.");
+    }
+
+    await pollContainerAsyncRequest(config, requestId);
+  } finally {
+    try {
+      await fetch(`${baseToolingUrl}/MetadataContainer/${encodeURIComponent(containerId)}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${config.accessToken}` }
+      });
+    } catch (_error) {
+      // best-effort cleanup; do not surface
+    }
+  }
+}
+
+async function pollContainerAsyncRequest(config, requestId) {
+  const url = `${config.instanceUrl}/services/data/v${config.apiVersion}/tooling/sobjects/ContainerAsyncRequest/${encodeURIComponent(
+    requestId
+  )}`;
+  const maxAttempts = 60;
+
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    const response = await fetch(url, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${config.accessToken}`,
+        Accept: "application/json"
+      }
+    });
+    const payload = await parseJsonResponse(response);
+    if (!response.ok) {
+      throw new Error(extractSalesforceError(payload, response.status));
+    }
+
+    const state = payload.State || payload.state;
+    if (state === "Completed") {
+      return payload;
+    }
+    if (state === "Failed" || state === "Aborted" || state === "Error") {
+      const message =
+        payload.ErrorMsg ||
+        payload.errorMsg ||
+        `Compile/save failed (state: ${state}).`;
+      throw new Error(message);
+    }
+    await sleep(1500);
+  }
+
+  throw new Error("Timed out waiting for Salesforce to compile the saved test class.");
+}
+
+async function runJustSavedTestClass(classId, className) {
+  if (!currentConfig || !classId) {
+    return;
+  }
+  if (isTestExecutionInProgress) {
+    setStatus("Test execution already in progress; saved class will not be auto-run.", "");
+    return;
+  }
+
+  const selectedTestClasses = [{ id: classId, name: className }];
+  const executionStartedAt = Date.now();
+  setExecutionUiState(true);
+  initializeTestExecutionTable(selectedTestClasses);
+  setStatus(`Queueing newly saved test class "${className}"...`, "");
+
+  try {
+    const queuedRunIds = [];
+    const result = await runTestClass(currentConfig, classId, className);
+    if (result && result.runId) {
+      queuedRunIds.push(result.runId);
+    }
+    const uniqueRunIds = Array.from(new Set(queuedRunIds.filter(Boolean)));
+    await monitorTestExecution({
+      config: currentConfig,
+      selectedTestClasses,
+      runIds: uniqueRunIds,
+      executionStartedAt
+    });
+  } catch (error) {
+    setStatus(getErrorMessage(error), "error");
+  } finally {
+    setExecutionUiState(false);
+  }
 }
